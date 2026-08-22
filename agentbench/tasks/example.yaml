@@ -1,0 +1,35 @@
+tasks:
+  - id: calc-subtract-bug
+    repo_url: agentbench/tasks/fixtures/calc_repo
+    setup_commands: []
+    failing_test_command: "pytest test_calc.py::test_subtract"
+    full_test_command: "pytest"
+    difficulty: easy
+
+  - id: string-title-case-bug
+    repo_url: agentbench/tasks/fixtures/string_repo
+    setup_commands: []
+    failing_test_command: "pytest test_strings.py::test_title_case"
+    full_test_command: "pytest"
+    difficulty: easy
+
+  - id: string-reverse-words-bug
+    repo_url: agentbench/tasks/fixtures/string_repo
+    setup_commands: []
+    failing_test_command: "pytest test_strings.py::test_reverse_words"
+    full_test_command: "pytest"
+    difficulty: easy
+
+  - id: cart-quantity-bug
+    repo_url: agentbench/tasks/fixtures/cart_repo
+    setup_commands: []
+    failing_test_command: "pytest test_cart.py::test_total_counts_quantity"
+    full_test_command: "pytest"
+    difficulty: easy
+
+  - id: cart-discount-bug
+    repo_url: agentbench/tasks/fixtures/cart_repo
+    setup_commands: []
+    failing_test_command: "pytest test_cart.py::test_discount_subtracts"
+    full_test_command: "pytest"
+    difficulty: easy

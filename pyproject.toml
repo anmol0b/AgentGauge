@@ -1,0 +1,27 @@
+[project]
+name = "agentbench"
+version = "0.1.0"
+description = "AI-friendliness benchmark: run coding agents against real repo tasks in Docker sandboxes"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.6",
+    "docker>=7.0",
+    "anthropic>=0.40",
+    "openai>=1.40",
+    "jinja2>=3.1",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["agentbench*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["docker: tests requiring a running Docker daemon"]

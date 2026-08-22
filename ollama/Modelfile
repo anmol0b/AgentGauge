@@ -1,0 +1,4 @@
+FROM qwen2.5:7b
+# Ollama defaults to a 4096-token context, too small for an agent loop
+# (tool outputs + history). Bake in a larger window.
+PARAMETER num_ctx 16384
