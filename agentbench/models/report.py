@@ -15,8 +15,10 @@ class VarianceReport(BaseModel):
     pass_rate: float | None = None
     error_rate: float = 0.0  # harness/infra failures / n_runs
     tampered_count: int = 0  # valid runs disqualified for editing tests
-    # cost/latency are means over valid runs only, to match pass_rate
-    cost_mean: float = 0.0
+    # cost/latency are means over valid runs only, to match pass_rate.
+    # cost_mean is None when no valid run had a priced model.
+    n_priced: int = 0
+    cost_mean: float | None = None
     cost_stddev: float = 0.0
     latency_mean: float = 0.0
     latency_stddev: float = 0.0

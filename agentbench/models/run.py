@@ -4,8 +4,16 @@ from pydantic import BaseModel
 
 
 class TokenUsage(BaseModel):
-    tokens_in: int = 0
+    tokens_in: int = 0  # uncached input tokens
     tokens_out: int = 0
+    # Cached input is billed at different rates than fresh input. Dropping
+    # these undercounts the cost of any run that hits the cache.
+    cache_write_tokens: int = 0
+    cache_read_tokens: int = 0
+
+    @property
+    def total_in(self) -> int:
+        return self.tokens_in + self.cache_write_tokens + self.cache_read_tokens
 
 
 class RunResult(BaseModel):
@@ -15,11 +23,16 @@ class RunResult(BaseModel):
     passed: bool
     tokens_in: int
     tokens_out: int
-    cost_usd: float
+    # None when the model has no entry in pricing.yaml — an unpriced run
+    # reports no cost rather than a figure guessed from another model.
+    cost_usd: float | None
     latency_s: float
     tool_call_count: int
     diff: str
-    regressions: list[str]  # other tests that broke
+    # other tests the fix broke. None means detection was unavailable
+    # (no junit report, unparseable, or a non-pytest suite) — which is
+    # not the same as [], meaning it ran and found none.
+    regressions: list[str] | None = None
     error: str | None = None
     # why the agent loop ended: end_turn | max_turns | max_tokens | error.
     # None for runs recorded before this was tracked.

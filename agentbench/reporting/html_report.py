@@ -43,6 +43,13 @@ _TEMPLATE = Template("""\
       count as a pass, regardless of exit code. Runs marked
       &ldquo;not checked&rdquo; predate this check or errored before it ran &mdash;
       their pass/fail is unverified on this point.</li>
+  <li><strong>Cost is only reported for models with a price on file</strong>
+      (<code>agentbench/providers/pricing.yaml</code>). An unlisted model shows
+      &ldquo;unpriced&rdquo; rather than a figure guessed from another model's rate.</li>
+  <li><strong>Regressions are detected from a junit report</strong>, which
+      needs a pytest-compatible suite. Where that report is missing or
+      unparseable the run reads &ldquo;not detected&rdquo; &mdash; not
+      &ldquo;none&rdquo;.</li>
   {% if concurrency %}
   <li><strong>Latency is not a clean measurement.</strong> Runs executed
       {{ concurrency }}-way concurrently against resource-capped containers, so
@@ -71,7 +78,11 @@ _TEMPLATE = Template("""\
       {{ "%.0f%%" | format(v.error_rate * 100) }}</td>
     <td class="{{ 'warn' if v.tampered_count else '' }}">
       {{ v.tampered_count or "—" }}</td>
+    {% if v.cost_mean is none %}
+    <td class="muted">unpriced</td>
+    {% else %}
     <td>${{ "%.4f" | format(v.cost_mean) }} &plusmn; {{ "%.4f" | format(v.cost_stddev) }}</td>
+    {% endif %}
     <td>{{ "%.1f" | format(v.latency_mean) }} &plusmn; {{ "%.1f" | format(v.latency_stddev) }}</td>
   </tr>
   {% endfor %}
@@ -91,11 +102,21 @@ _TEMPLATE = Template("""\
     <td class="{{ 'pass' if r.passed else 'fail' }}">{{ "yes" if r.passed else "no" }}</td>
     {% endif %}
     <td>{{ r.stop_reason or "—" }}</td>
+    {% if r.cost_usd is none %}
+    <td class="muted">unpriced</td>
+    {% else %}
     <td>${{ "%.4f" | format(r.cost_usd) }}</td>
+    {% endif %}
     <td>{{ "%.1f" | format(r.latency_s) }}</td>
     <td>{{ r.tool_call_count }}</td>
     <td>{{ r.tokens_in }}/{{ r.tokens_out }}</td>
-    <td>{{ r.regressions | join(", ") if r.regressions else "—" }}</td>
+    {% if r.regressions %}
+    <td class="warn">{{ r.regressions | join(", ") }}</td>
+    {% elif r.regressions is none %}
+    <td class="muted">not detected</td>
+    {% else %}
+    <td>—</td>
+    {% endif %}
     {% if r.tampered_tests %}
     <td class="warn">{{ r.tampered_tests | join(", ") }}</td>
     {% elif r.tampered_tests is none %}

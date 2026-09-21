@@ -37,12 +37,12 @@ async def run_once(
     """
     started = time.monotonic()
     tokens_in = tokens_out = tool_call_count = 0
-    cost = 0.0
+    cost: float | None = 0.0
     diff = ""
     error: str | None = None
     stop_reason: str | None = None
     passed = False
-    regressions: list[str] = []
+    regressions: list[str] | None = None
     tampered: list[str] | None = None
     handle = None
 
@@ -77,7 +77,8 @@ async def run_once(
             passed = check.exit_code == 0
 
             after = await _failing_tests(executor, handle, task)
-            regressions = sorted(after - baseline)
+            if baseline is not None and after is not None:
+                regressions = sorted(after - baseline)
 
             await executor.exec(
                 handle, ["sh", "-c", "git add -A >/dev/null 2>&1; true"], timeout_s=30
@@ -155,16 +156,31 @@ def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, check=True)
 
 
-async def _failing_tests(executor: SandboxExecutor, handle, task: Task) -> set[str]:
-    """Node ids of failing tests, via junitxml (assumes pytest-compatible runner)."""
-    command = f"{task.full_test_command} --junitxml=/tmp/agentbench-junit.xml >/dev/null 2>&1; true"
+async def _failing_tests(
+    executor: SandboxExecutor, handle, task: Task
+) -> set[str] | None:
+    """Node ids of currently failing tests, via junitxml.
+
+    Returns None when the report could not be produced or parsed — the runner
+    must not read that as "nothing is failing". `--junitxml` is a pytest flag,
+    so a non-pytest suite lands here and regressions are reported as undetected
+    rather than silently empty.
+    """
+    report = "/tmp/agentbench-junit.xml"
+    # Delete first: a stale report from the baseline pass would otherwise be
+    # read back as the post-fix result if this run fails to write one.
+    await executor.exec(handle, ["sh", "-c", f"rm -f {report}"], timeout_s=30)
+    command = f"{task.full_test_command} --junitxml={report} >/dev/null 2>&1; true"
     await executor.exec(handle, ["sh", "-c", command], TEST_TIMEOUT_S)
     try:
-        xml_text = await executor.read_file(handle, "/tmp/agentbench-junit.xml")
+        xml_text = await executor.read_file(handle, report)
     except FileNotFoundError:
-        return set()
+        return None
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
     failing: set[str] = set()
-    root = ET.fromstring(xml_text)
     for testcase in root.iter("testcase"):
         node_id = f"{testcase.get('classname', '')}::{testcase.get('name', '')}"
         if any(child.tag in ("failure", "error") for child in testcase):

@@ -31,6 +31,8 @@ def aggregate(runs: list[RunResult]) -> AggregateReport:
 def _summarize(task_id: str, model: str, group: list[RunResult]) -> VarianceReport:
     valid = [r for r in group if r.error is None]
     errored = len(group) - len(valid)
+    # runs on a model with no price on file contribute no cost figure
+    priced = [r.cost_usd for r in valid if r.cost_usd is not None]
     return VarianceReport(
         task_id=task_id,
         model=model,
@@ -39,8 +41,9 @@ def _summarize(task_id: str, model: str, group: list[RunResult]) -> VarianceRepo
         pass_rate=(sum(r.passed for r in valid) / len(valid)) if valid else None,
         error_rate=errored / len(group) if group else 0.0,
         tampered_count=sum(1 for r in valid if r.tampered_tests),
-        cost_mean=statistics.fmean(r.cost_usd for r in valid) if valid else 0.0,
-        cost_stddev=_stddev([r.cost_usd for r in valid]),
+        cost_mean=statistics.fmean(priced) if priced else None,
+        cost_stddev=_stddev(priced),
+        n_priced=len(priced),
         latency_mean=statistics.fmean(r.latency_s for r in valid) if valid else 0.0,
         latency_stddev=_stddev([r.latency_s for r in valid]),
     )

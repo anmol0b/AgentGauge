@@ -17,11 +17,11 @@ CREATE TABLE IF NOT EXISTS runs (
     passed INTEGER NOT NULL,
     tokens_in INTEGER NOT NULL,
     tokens_out INTEGER NOT NULL,
-    cost_usd REAL NOT NULL,
+    cost_usd REAL,
     latency_s REAL NOT NULL,
     tool_call_count INTEGER NOT NULL,
     diff TEXT NOT NULL,
-    regressions TEXT NOT NULL,
+    regressions TEXT,
     error TEXT,
     stop_reason TEXT,
     tampered_tests TEXT
@@ -45,7 +45,7 @@ _COLUMNS = (
 
 
 def _dump_or_null(value: list[str] | None) -> str | None:
-    """Preserve the not-checked/checked-and-clean distinction through SQL."""
+    """Preserve the unknown/empty distinction (None vs []) through SQL."""
     return None if value is None else json.dumps(value)
 
 
@@ -57,12 +57,29 @@ class RunStore:
         self._conn.commit()
 
     def _migrate(self) -> None:
-        existing = {
-            row[1] for row in self._conn.execute("PRAGMA table_info(runs)").fetchall()
-        }
+        columns = self._conn.execute("PRAGMA table_info(runs)").fetchall()
+        existing = {row[1] for row in columns}
         for column, spec in _MIGRATIONS.items():
             if column not in existing:
                 self._conn.execute(f"ALTER TABLE runs ADD COLUMN {column} {spec}")
+        relaxed = {"cost_usd", "regressions"}
+        if any(row[1] in relaxed and row[3] for row in columns):
+            self._rebuild_for_nullable_columns()
+
+    def _rebuild_for_nullable_columns(self) -> None:
+        """Drop NOT NULL on cost_usd and regressions — SQLite needs a rebuild.
+
+        Both columns now carry a real "unknown": an unpriced model records no
+        cost rather than a guess, and a suite whose junit report is missing
+        records no regression list rather than an empty one.
+        """
+        self._conn.execute("ALTER TABLE runs RENAME TO runs_old")
+        self._conn.execute(_SCHEMA)
+        self._conn.execute(
+            f"INSERT INTO runs (created_at, {_COLUMNS}) "
+            f"SELECT created_at, {_COLUMNS} FROM runs_old"
+        )
+        self._conn.execute("DROP TABLE runs_old")
 
     def insert(self, result: RunResult, run_set_id: str = "") -> None:
         self._conn.execute(
@@ -72,7 +89,7 @@ class RunStore:
                 result.task_id, result.run_index, result.model, int(result.passed),
                 result.tokens_in, result.tokens_out, result.cost_usd,
                 result.latency_s, result.tool_call_count, result.diff,
-                json.dumps(result.regressions), result.error, result.stop_reason,
+                _dump_or_null(result.regressions), result.error, result.stop_reason,
                 _dump_or_null(result.tampered_tests),
                 run_set_id or result.run_set_id,
             ),
@@ -102,7 +119,8 @@ class RunStore:
             RunResult(
                 task_id=r[0], run_index=r[1], model=r[2], passed=bool(r[3]),
                 tokens_in=r[4], tokens_out=r[5], cost_usd=r[6], latency_s=r[7],
-                tool_call_count=r[8], diff=r[9], regressions=json.loads(r[10]),
+                tool_call_count=r[8], diff=r[9],
+                regressions=json.loads(r[10]) if r[10] is not None else None,
                 error=r[11], stop_reason=r[12],
                 tampered_tests=json.loads(r[13]) if r[13] is not None else None,
                 run_set_id=r[14] or "",

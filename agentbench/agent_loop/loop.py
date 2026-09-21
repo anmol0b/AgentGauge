@@ -33,7 +33,7 @@ _NO_EDIT_NUDGE = (
 class AgentLoopResult(BaseModel):
     messages: list[Message]
     usage: TokenUsage
-    cost_usd: float
+    cost_usd: float | None  # None if any turn used an unpriced model
     tool_call_count: int
     stop_reason: str  # "end_turn" | "max_turns" | "max_tokens" | "error"
 
@@ -48,7 +48,7 @@ async def run_agent_loop(
 ) -> AgentLoopResult:
     messages: list[Message] = [Message(role="user", content=instruction)]
     total_usage = TokenUsage()
-    total_cost = 0.0
+    total_cost: float | None = 0.0
     tool_call_count = 0
     made_mutation = False
 
@@ -57,7 +57,11 @@ async def run_agent_loop(
         messages.extend(response.messages)
         total_usage.tokens_in += response.usage.tokens_in
         total_usage.tokens_out += response.usage.tokens_out
-        total_cost += provider.compute_cost(response.usage)
+        turn_cost = provider.compute_cost(response.usage)
+        if turn_cost is None:
+            total_cost = None  # unpriced model: no honest total exists
+        elif total_cost is not None:
+            total_cost += turn_cost
 
         if response.stop_reason != "tool_use" or not response.tool_calls:
             if not made_mutation:

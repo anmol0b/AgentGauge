@@ -9,14 +9,7 @@ from agentbench.models.provider import (
     ToolSpec,
 )
 from agentbench.models.run import TokenUsage
-
-# USD per 1M tokens: (input, output)
-_PRICING: dict[str, tuple[float, float]] = {
-    "claude-opus-4-1": (15.0, 75.0),
-    "claude-sonnet-4-5": (3.0, 15.0),
-    "claude-haiku-4-5": (1.0, 5.0),
-}
-_DEFAULT_PRICE = (3.0, 15.0)
+from agentbench.providers.pricing import lookup
 
 _STOP_MAP = {
     "end_turn": "end_turn",
@@ -67,20 +60,25 @@ class AnthropicProvider:
         return ProviderResponse(
             messages=[assistant],
             tool_calls=tool_calls,
-            usage=TokenUsage(
-                tokens_in=response.usage.input_tokens,
-                tokens_out=response.usage.output_tokens,
-            ),
+            usage=_usage(response.usage),
             stop_reason=_STOP_MAP.get(response.stop_reason, "error"),
         )
 
-    def compute_cost(self, usage: TokenUsage) -> float:
-        price_in, price_out = next(
-            (p for prefix, p in sorted(_PRICING.items(), key=lambda kv: -len(kv[0]))
-             if self._model.startswith(prefix)),
-            _DEFAULT_PRICE,
-        )
-        return (usage.tokens_in * price_in + usage.tokens_out * price_out) / 1_000_000
+    def compute_cost(self, usage: TokenUsage) -> float | None:
+        """None when this model has no price on file — never a guess."""
+        price = lookup(self._model)
+        return price.cost(usage) if price else None
+
+
+def _usage(raw) -> TokenUsage:
+    """Anthropic reports cache tokens separately from `input_tokens`, so these
+    add to the total rather than double-counting it."""
+    return TokenUsage(
+        tokens_in=raw.input_tokens,
+        tokens_out=raw.output_tokens,
+        cache_write_tokens=getattr(raw, "cache_creation_input_tokens", 0) or 0,
+        cache_read_tokens=getattr(raw, "cache_read_input_tokens", 0) or 0,
+    )
 
 
 def _to_anthropic_messages(messages: list[Message]) -> list[dict]:

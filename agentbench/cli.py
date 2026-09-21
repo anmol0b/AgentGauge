@@ -76,8 +76,10 @@ async def amain() -> None:
     print(f"\nwrote {out} ({len(results)} runs recorded in {args.db}, set {run_set_id})")
     for v in report.variance:
         rate = "n/a (all runs errored)" if v.pass_rate is None else f"{v.pass_rate:.0%}"
+        cost = ("unpriced" if v.cost_mean is None
+                else f"${v.cost_mean:.4f}±{v.cost_stddev:.4f}")
         line = (f"  {v.task_id} | {v.model}: pass rate {rate} of {v.n_valid} valid runs, "
-                f"cost ${v.cost_mean:.4f}±{v.cost_stddev:.4f}")
+                f"cost {cost}")
         if v.error_rate:
             line += f", {v.error_rate:.0%} harness errors"
         if v.tampered_count:

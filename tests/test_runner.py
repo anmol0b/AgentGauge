@@ -149,3 +149,61 @@ def test_is_test_path():
     assert not _is_test_path("calc.py")
     assert not _is_test_path("src/cart.py")
     assert not _is_test_path("testing/util.py")
+
+
+class NoJunitExecutor(ScriptedExecutor):
+    """A suite that never produces a junit report (e.g. not pytest)."""
+
+    async def read_file(self, handle, path) -> str:
+        if path.endswith("junit.xml"):
+            raise FileNotFoundError(path)
+        return await super().read_file(handle, path)
+
+
+class BadJunitExecutor(ScriptedExecutor):
+    async def read_file(self, handle, path) -> str:
+        if path.endswith("junit.xml"):
+            return "<not valid xml"
+        return await super().read_file(handle, path)
+
+
+async def test_regressions_reported_as_undetected_when_junit_missing(tmp_path):
+    """Missing report must not read as 'no regressions'."""
+    result = await run_once(
+        _task(tmp_path), 0, "fake-model", NoJunitExecutor(), provider=OneEditProvider()
+    )
+    assert result.error is None
+    assert result.regressions is None
+
+
+async def test_regressions_reported_as_undetected_when_junit_unparseable(tmp_path):
+    result = await run_once(
+        _task(tmp_path), 0, "fake-model", BadJunitExecutor(), provider=OneEditProvider()
+    )
+    assert result.error is None
+    assert result.regressions is None
+
+
+async def test_regressions_empty_when_detection_worked_and_found_none(tmp_path):
+    """Baseline and after are identical here, so the list is empty, not None."""
+    result = await run_once(
+        _task(tmp_path), 0, "fake-model", ScriptedExecutor(), provider=OneEditProvider()
+    )
+    assert result.regressions == []
+
+
+async def test_stale_junit_report_is_deleted_before_each_pass(tmp_path):
+    """Otherwise a failed 'after' pass reads back the baseline's report."""
+    executor = ScriptedExecutor()
+    seen: list[str] = []
+    original = executor.exec
+
+    async def spy(handle, command, timeout_s):
+        seen.append(" ".join(command))
+        return await original(handle, command, timeout_s)
+
+    executor.exec = spy
+    await run_once(_task(tmp_path), 0, "fake-model", executor, provider=OneEditProvider())
+
+    removals = [c for c in seen if "rm -f" in c and "junit" in c]
+    assert len(removals) == 2  # once before the baseline pass, once before the after pass
