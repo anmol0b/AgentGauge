@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS runs (
     tokens_out INTEGER NOT NULL,
     cost_usd REAL,
     latency_s REAL NOT NULL,
+    setup_s REAL NOT NULL DEFAULT 0,
+    agent_s REAL NOT NULL DEFAULT 0,
+    grading_s REAL NOT NULL DEFAULT 0,
     tool_call_count INTEGER NOT NULL,
     diff TEXT NOT NULL,
     regressions TEXT,
@@ -39,12 +42,15 @@ _MIGRATIONS = {
     "tampered_tests": "TEXT",
     "repo_id": "TEXT",
     "difficulty": "TEXT",
+    "setup_s": "REAL NOT NULL DEFAULT 0",
+    "agent_s": "REAL NOT NULL DEFAULT 0",
+    "grading_s": "REAL NOT NULL DEFAULT 0",
 }
 
 _COLUMNS = (
     "task_id, run_index, model, passed, tokens_in, tokens_out, cost_usd, "
     "latency_s, tool_call_count, diff, regressions, error, stop_reason, "
-    "tampered_tests, run_set_id, repo_id, difficulty"
+    "tampered_tests, run_set_id, repo_id, difficulty, setup_s, agent_s, grading_s"
 )
 
 
@@ -87,7 +93,7 @@ class RunStore:
     def insert(self, result: RunResult, run_set_id: str = "") -> None:
         self._conn.execute(
             f"INSERT INTO runs ({_COLUMNS}) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 result.task_id,
                 result.run_index,
@@ -106,6 +112,9 @@ class RunStore:
                 run_set_id or result.run_set_id,
                 result.repo_id,
                 result.difficulty,
+                result.setup_s,
+                result.agent_s,
+                result.grading_s,
             ),
         )
         self._conn.commit()
@@ -148,6 +157,9 @@ class RunStore:
                 run_set_id=r[14] or "",
                 repo_id=r[15],
                 difficulty=r[16],
+                setup_s=r[17],
+                agent_s=r[18],
+                grading_s=r[19],
             )
             for r in rows
         ]

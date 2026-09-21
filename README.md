@@ -114,10 +114,19 @@ reproducible the moment the branch moves).
   inflates its recorded cost and token count for that run.
 - Regression detection and `--junitxml` assume pytest.
 
+### Writing another executor
+
+The sandbox sits behind one narrow interface, so it can be reimplemented in
+another language without touching evaluation logic. `docs/PROTOCOL.md`
+specifies the wire form; `tests/conformance/` is the normative definition of
+correct behaviour, and an implementation is conformant when that suite passes
+against it.
+
 ### Development
 
 ```sh
 .venv/bin/python -m pytest tests/ -m "not docker"   # offline suite, no API keys
+.venv/bin/python -m pytest tests/conformance        # the executor contract
 .venv/bin/python -m pytest tests/                   # adds the Docker integration test
 .venv/bin/python -m ruff check .
 .venv/bin/python scripts/sandbox_smoke.py           # docker executor standalone check

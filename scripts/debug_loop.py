@@ -8,6 +8,7 @@ import asyncio
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from agentbench.agent_loop.loop import DEFAULT_SYSTEM_PROMPT, run_agent_loop
 from agentbench.providers import make_provider
@@ -22,12 +23,24 @@ class PrintingExecutor:
     def __init__(self) -> None:
         self.files = {"calc.py": CALC, "test_calc.py": TEST}
 
-    async def start(self, repo_path: Path, image: str) -> SandboxHandle:
+    async def start(self, repo: Any, image: str, policy: Any = None) -> SandboxHandle:
         return SandboxHandle(id="debug")
 
-    async def exec(self, handle: SandboxHandle, command: list[str], timeout_s: int) -> ExecResult:
+    async def exec(
+        self,
+        handle: SandboxHandle,
+        command: list[str],
+        timeout_s: int,
+        on_output: Any = None,
+    ) -> ExecResult:
         print(f"  [exec] {' '.join(command)[:100]}")
         return ExecResult(exit_code=1, stdout="FAILED test_calc.py::test_subtract", stderr="")
+
+    async def read_bytes(self, handle: SandboxHandle, path: str) -> bytes:
+        return (await self.read_file(handle, path)).encode("utf-8")
+
+    async def write_bytes(self, handle: SandboxHandle, path: str, content: bytes) -> None:
+        await self.write_file(handle, path, content.decode("utf-8"))
 
     async def read_file(self, handle: SandboxHandle, path: str) -> str:
         print(f"  [read_file] {path}")
@@ -50,7 +63,7 @@ async def main() -> None:
     result = await run_agent_loop(
         provider,
         executor,
-        await executor.start(Path("."), "debug"),
+        await executor.start(None, "debug"),
         instruction=(
             "This repository has a failing test. The failing test command is:\n\n"
             "  pytest test_calc.py::test_subtract\n\n"

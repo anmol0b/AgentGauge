@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 from agentbench.sandbox.docker_executor import DockerSandboxExecutor
+from agentbench.sandbox.protocol import HostPathRepo
 
 
 async def main() -> None:
@@ -16,7 +17,7 @@ async def main() -> None:
         repo = Path(tmp)
         (repo / "hello.txt").write_text("hello from host\n")
         executor = DockerSandboxExecutor()
-        handle = await executor.start(repo, image="python:3.12-slim")
+        handle = await executor.start(HostPathRepo(path=str(repo)), image="python:3.12-slim")
         try:
             result = await executor.exec(handle, ["echo", "hello"], timeout_s=30)
             assert result.exit_code == 0 and result.stdout.strip() == "hello", result

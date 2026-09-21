@@ -113,3 +113,40 @@ def test_unchecked_tampering_survives_round_trip(tmp_path):
     store.close()
     assert runs[0].tampered_tests is None
     assert runs[1].tampered_tests == []
+
+
+def test_phase_timings_round_trip(tmp_path):
+    store = RunStore(tmp_path / "runs.db")
+    store.insert(_result(setup_s=1.5, agent_s=20.25, grading_s=3.0))
+    runs = store.all_runs()
+    store.close()
+    assert (runs[0].setup_s, runs[0].agent_s, runs[0].grading_s) == (1.5, 20.25, 3.0)
+
+
+def test_v1_rows_get_zero_phase_timings(tmp_path):
+    """Unknown, and honestly so — they predate the measurement."""
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        """CREATE TABLE runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            task_id TEXT NOT NULL, run_index INTEGER NOT NULL, model TEXT NOT NULL,
+            passed INTEGER NOT NULL, tokens_in INTEGER NOT NULL,
+            tokens_out INTEGER NOT NULL, cost_usd REAL NOT NULL,
+            latency_s REAL NOT NULL, tool_call_count INTEGER NOT NULL,
+            diff TEXT NOT NULL, regressions TEXT NOT NULL, error TEXT)"""
+    )
+    conn.execute(
+        "INSERT INTO runs (task_id, run_index, model, passed, tokens_in, tokens_out,"
+        " cost_usd, latency_s, tool_call_count, diff, regressions, error)"
+        " VALUES ('old', 0, 'm', 1, 1, 1, 0.0, 9.9, 1, '', '[]', NULL)"
+    )
+    conn.commit()
+    conn.close()
+
+    store = RunStore(path)
+    runs = store.all_runs()
+    store.close()
+    assert runs[0].latency_s == 9.9
+    assert (runs[0].setup_s, runs[0].agent_s, runs[0].grading_s) == (0.0, 0.0, 0.0)
