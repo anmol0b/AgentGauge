@@ -14,7 +14,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-PyYAML",
+]
 
 [project.scripts]
 agentbench = "agentbench.cli:main"
@@ -32,6 +39,26 @@ agentbench = ["providers/pricing.yaml", "tasks/*.yaml"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = ["docker: tests requiring a running Docker daemon"]
+# --strict-markers: a typo'd marker silently runs the test everywhere instead
+# of where it was meant to; --strict-config catches a mistyped setting here.
+addopts = "--strict-markers --strict-config"
+
+[tool.coverage.run]
+branch = true
+source = ["agentbench"]
+
+[tool.coverage.report]
+# Branch coverage of the offline suite sits at ~80%; docker_executor is the
+# bulk of the remainder and is exercised by the `sandbox` CI job instead. The
+# bar is set to catch a real drop, not to police fractions — a gate that fails
+# on rounding gets ignored, which is worse than no gate.
+fail_under = 78
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",  # Protocol method bodies
+]
 
 [tool.ruff]
 line-length = 100
@@ -47,3 +74,34 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
 # tests import fixtures after defining helpers they depend on, and build
 # kwargs dicts with dict(...) on purpose so they read as call signatures
 "tests/*" = ["E402", "C408"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["agentbench", "tests", "scripts"]
+# Fixture repos are benchmark inputs with deliberate bugs, not project code.
+exclude = "agentbench/tasks/fixtures/"
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+# docker-py ships no py.typed, so mypy sees the package but none of its
+# contents. Following the untyped source gives real signatures instead of a
+# module with no attributes.
+module = ["docker", "docker.*"]
+ignore_missing_imports = true
+follow_untyped_imports = true
+
+[[tool.mypy.overrides]]
+# Tests and scripts are checked, but not held to full annotation coverage:
+# a fake's method signature is documented by the protocol it stands in for.
+module = ["tests.*", "scripts.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+# The single file allowed to touch the docker SDK, which is untyped: calls
+# into it cannot be checked, so that one rule is relaxed here rather than
+# globally.
+module = "agentbench.sandbox.docker_executor"
+disallow_untyped_calls = false

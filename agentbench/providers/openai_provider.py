@@ -2,19 +2,21 @@
 
 import json
 import uuid
+from typing import Any, cast
 
 import openai
 
 from agentbench.models.provider import (
     Message,
     ProviderResponse,
+    StopReason,
     ToolCall,
     ToolSpec,
 )
 from agentbench.models.run import TokenUsage
 from agentbench.providers.pricing import Price, lookup
 
-_STOP_MAP = {
+_STOP_MAP: dict[str, StopReason] = {
     "stop": "end_turn",
     "tool_calls": "tool_use",
     "length": "max_tokens",
@@ -42,14 +44,15 @@ class OpenAIProvider:
     async def run_agent_turn(
         self, messages: list[Message], tools: list[ToolSpec]
     ) -> ProviderResponse:
-        wire: list[dict] = []
+        wire: list[dict[str, Any]] = []
         if self._system:
             wire.append({"role": "system", "content": self._system})
         wire.extend(_to_openai_messages(messages))
         response = await self._client.chat.completions.create(
             model=self._model,
             max_tokens=self._max_tokens,
-            messages=wire,
+            # provider-neutral messages are converted to plain dicts by design
+            messages=cast(Any, wire),
             tools=[
                 {
                     "type": "function",
@@ -70,7 +73,10 @@ class OpenAIProvider:
                 name=tc.function.name,
                 arguments=json.loads(tc.function.arguments or "{}"),
             )
+            # a custom (non-function) tool call carries no .function and would
+            # raise here; we declare only function tools, so skip anything else
             for tc in (choice.message.tool_calls or [])
+            if tc.type == "function"
         ]
         content = choice.message.content or ""
         finish_reason = choice.finish_reason
@@ -105,17 +111,15 @@ class OpenAIProvider:
         return price.cost(usage) if price else None
 
 
-def _to_openai_messages(messages: list[Message]) -> list[dict]:
-    out: list[dict] = []
+def _to_openai_messages(messages: list[Message]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     for msg in messages:
         if msg.role == "tool":
-            out.append(
-                {"role": "tool", "tool_call_id": msg.tool_call_id, "content": msg.content}
-            )
+            out.append({"role": "tool", "tool_call_id": msg.tool_call_id, "content": msg.content})
         elif msg.role == "assistant":
             # null content is rejected by some OpenAI-compatible servers
             # (Ollama: "invalid message content type: <nil>") — always a string
-            wire: dict = {"role": "assistant", "content": msg.content or ""}
+            wire: dict[str, Any] = {"role": "assistant", "content": msg.content or ""}
             if msg.tool_calls:
                 wire["tool_calls"] = [
                     {

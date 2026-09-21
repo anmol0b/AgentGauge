@@ -1,13 +1,23 @@
+from typing import Any
+
 from agentbench.models.run import RunResult
 from agentbench.reporting.aggregate import aggregate
 from agentbench.reporting.html_report import render_html
 
 
 def _run(**overrides):
-    base = dict(
-        task_id="t1", run_index=0, model="m1", passed=True, tokens_in=100,
-        tokens_out=50, cost_usd=0.01, latency_s=10.0, tool_call_count=3,
-        diff="--- a/calc.py", regressions=[],
+    base: dict[str, Any] = dict(
+        task_id="t1",
+        run_index=0,
+        model="m1",
+        passed=True,
+        tokens_in=100,
+        tokens_out=50,
+        cost_usd=0.01,
+        latency_s=10.0,
+        tool_call_count=3,
+        diff="--- a/calc.py",
+        regressions=[],
     )
     return RunResult(**(base | overrides))
 
@@ -44,12 +54,8 @@ def test_report_renders_na_when_every_run_errored(tmp_path):
 
 
 def test_unchecked_runs_are_labelled_not_checked(tmp_path):
-    clean = render_html(
-        aggregate([_run(tampered_tests=[])]), tmp_path / "a.html"
-    ).read_text()
-    unchecked = render_html(
-        aggregate([_run(tampered_tests=None)]), tmp_path / "b.html"
-    ).read_text()
+    clean = render_html(aggregate([_run(tampered_tests=[])]), tmp_path / "a.html").read_text()
+    unchecked = render_html(aggregate([_run(tampered_tests=None)]), tmp_path / "b.html").read_text()
     cell = '<td class="muted">not checked</td>'
     assert cell not in clean
     assert cell in unchecked

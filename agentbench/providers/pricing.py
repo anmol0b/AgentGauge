@@ -37,9 +37,7 @@ class Price(BaseModel):
             else self.input * _CACHE_WRITE_MULTIPLIER
         )
         read_rate = (
-            self.cache_read
-            if self.cache_read is not None
-            else self.input * _CACHE_READ_MULTIPLIER
+            self.cache_read if self.cache_read is not None else self.input * _CACHE_READ_MULTIPLIER
         )
         total = (
             usage.tokens_in * self.input
@@ -53,11 +51,7 @@ class Price(BaseModel):
 @cache
 def _table() -> dict[str, Price]:
     raw = yaml.safe_load(_PRICING_FILE.read_text())
-    return {
-        model: Price(**fields)
-        for group in raw.values()
-        for model, fields in group.items()
-    }
+    return {model: Price(**fields) for group in raw.values() for model, fields in group.items()}
 
 
 def lookup(model: str) -> Price | None:

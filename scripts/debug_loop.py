@@ -19,36 +19,38 @@ TEST = (FIXTURES / "test_calc.py").read_text()
 
 
 class PrintingExecutor:
-    def __init__(self):
+    def __init__(self) -> None:
         self.files = {"calc.py": CALC, "test_calc.py": TEST}
 
-    async def start(self, repo_path, image):
+    async def start(self, repo_path: Path, image: str) -> SandboxHandle:
         return SandboxHandle(id="debug")
 
-    async def exec(self, handle, command, timeout_s):
+    async def exec(self, handle: SandboxHandle, command: list[str], timeout_s: int) -> ExecResult:
         print(f"  [exec] {' '.join(command)[:100]}")
         return ExecResult(exit_code=1, stdout="FAILED test_calc.py::test_subtract", stderr="")
 
-    async def read_file(self, handle, path):
+    async def read_file(self, handle: SandboxHandle, path: str) -> str:
         print(f"  [read_file] {path}")
         if path not in self.files:
             raise FileNotFoundError(path)
         return self.files[path]
 
-    async def write_file(self, handle, path, content):
+    async def write_file(self, handle: SandboxHandle, path: str, content: str) -> None:
         print(f"  [write_file] {path} ({len(content)} chars)")
         self.files[path] = content
 
-    async def teardown(self, handle):
+    async def teardown(self, handle: SandboxHandle) -> None:
         pass
 
 
-async def main():
+async def main() -> None:
     model = sys.argv[1] if len(sys.argv) > 1 else "ollama/agentbench-qwen"
     provider = make_provider(model, system=DEFAULT_SYSTEM_PROMPT)
     executor = PrintingExecutor()
     result = await run_agent_loop(
-        provider, executor, await executor.start(None, None),
+        provider,
+        executor,
+        await executor.start(Path("."), "debug"),
         instruction=(
             "This repository has a failing test. The failing test command is:\n\n"
             "  pytest test_calc.py::test_subtract\n\n"

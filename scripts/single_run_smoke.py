@@ -18,18 +18,21 @@ from agentbench.sandbox.docker_executor import DockerSandboxExecutor
 
 async def main() -> None:
     model = sys.argv[1] if len(sys.argv) > 1 else "claude-sonnet-4-5"
-    taskset = TaskSet(
-        **yaml.safe_load(Path("agentbench/tasks/example.yaml").read_text())
-    )
+    taskset = TaskSet(**yaml.safe_load(Path("agentbench/tasks/example.yaml").read_text()))
     task = taskset.tasks[0]
     print(f"running task {task.id!r} with {model} ...")
     result = await run_once(
-        task, run_index=0, model=model,
-        executor=DockerSandboxExecutor(), image="agentbench-base:py3.12",
+        task,
+        run_index=0,
+        model=model,
+        executor=DockerSandboxExecutor(),
+        image="agentbench-base:py3.12",
     )
-    print(f"passed={result.passed} cost=${result.cost_usd:.4f} "
-          f"latency={result.latency_s:.1f}s tool_calls={result.tool_call_count} "
-          f"tokens={result.tokens_in}+{result.tokens_out}")
+    print(
+        f"passed={result.passed} cost=${result.cost_usd:.4f} "
+        f"latency={result.latency_s:.1f}s tool_calls={result.tool_call_count} "
+        f"tokens={result.tokens_in}+{result.tokens_out}"
+    )
     print(f"regressions={result.regressions} error={result.error}")
     print("--- diff ---")
     print(result.diff)

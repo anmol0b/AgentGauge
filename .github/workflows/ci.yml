@@ -5,16 +5,102 @@ on:
     branches: [main]
   pull_request:
 
+# A superseded PR run tells you nothing; cancel it and keep the latest.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
 jobs:
-  test:
+  lint:
+    name: Lint and format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
-      - run: ruff check .
-      # The Docker-marked test needs a daemon and the sandbox image; the rest
-      # of the suite is offline and needs no API keys, so it gates every push.
-      - run: pytest tests/ -m "not docker" -q
+      - name: ruff check
+        run: ruff check --output-format=github .
+      - name: ruff format
+        run: ruff format --check --diff .
+
+  types:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      # strict on the package; tests and scripts are checked a notch below
+      - run: mypy
+
+  test:
+    name: Tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      # -W error: a DeprecationWarning from a dependency is a problem to fix
+      # now, not after it becomes a breakage.
+      - name: pytest
+        run: pytest tests/ -m "not docker" -W error --cov=agentbench --cov-report=term-missing
+
+  sandbox:
+    name: Docker sandbox
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      # The docker test skips itself when no daemon answers. Without this,
+      # a runner without Docker would pass the job having run nothing.
+      - name: Require a Docker daemon
+        run: docker info
+      - name: Build the sandbox image
+        run: docker build -t agentbench-base:py3.12 -f docker/base.Dockerfile docker/
+      # The one test that needs a daemon. It is skipped on laptops, so without
+      # this job the Docker executor — the component that actually isolates
+      # untrusted agent output — would never be exercised anywhere.
+      - name: Docker integration test
+        run: pytest tests/ -m docker -v -rs
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]" pip-audit
+      # --skip-editable: agentbench itself is not on PyPI to audit against.
+      - run: pip-audit --skip-editable --progress-spinner=off

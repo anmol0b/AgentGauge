@@ -1,17 +1,20 @@
 """Anthropic implementation of ModelProvider."""
 
+from typing import Any
+
 import anthropic
 
 from agentbench.models.provider import (
     Message,
     ProviderResponse,
+    StopReason,
     ToolCall,
     ToolSpec,
 )
 from agentbench.models.run import TokenUsage
 from agentbench.providers.pricing import lookup
 
-_STOP_MAP = {
+_STOP_MAP: dict[str, StopReason] = {
     "end_turn": "end_turn",
     "tool_use": "tool_use",
     "max_tokens": "max_tokens",
@@ -30,7 +33,7 @@ class AnthropicProvider:
     async def run_agent_turn(
         self, messages: list[Message], tools: list[ToolSpec]
     ) -> ProviderResponse:
-        kwargs: dict = {
+        kwargs: dict[str, Any] = {
             "model": self._model,
             "max_tokens": self._max_tokens,
             "messages": _to_anthropic_messages(messages),
@@ -61,7 +64,7 @@ class AnthropicProvider:
             messages=[assistant],
             tool_calls=tool_calls,
             usage=_usage(response.usage),
-            stop_reason=_STOP_MAP.get(response.stop_reason, "error"),
+            stop_reason=_STOP_MAP.get(response.stop_reason or "", "error"),
         )
 
     def compute_cost(self, usage: TokenUsage) -> float | None:
@@ -70,7 +73,7 @@ class AnthropicProvider:
         return price.cost(usage) if price else None
 
 
-def _usage(raw) -> TokenUsage:
+def _usage(raw: Any) -> TokenUsage:
     """Anthropic reports cache tokens separately from `input_tokens`, so these
     add to the total rather than double-counting it."""
     return TokenUsage(
@@ -81,13 +84,13 @@ def _usage(raw) -> TokenUsage:
     )
 
 
-def _to_anthropic_messages(messages: list[Message]) -> list[dict]:
+def _to_anthropic_messages(messages: list[Message]) -> list[dict[str, Any]]:
     """Convert normalized messages to Anthropic format.
 
     Tool results (role="tool") become tool_result blocks inside user messages;
     consecutive tool results merge into one user message.
     """
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     for msg in messages:
         if msg.role == "tool":
             block = {
@@ -100,7 +103,7 @@ def _to_anthropic_messages(messages: list[Message]) -> list[dict]:
             else:
                 out.append({"role": "user", "content": [block]})
         elif msg.role == "assistant":
-            content: list[dict] = []
+            content: list[dict[str, Any]] = []
             if msg.content:
                 content.append({"type": "text", "text": msg.content})
             for call in msg.tool_calls:

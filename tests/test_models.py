@@ -22,9 +22,17 @@ def test_task_round_trip():
 
 def test_run_result_defaults():
     result = RunResult(
-        task_id="t1", run_index=0, model="claude-sonnet-4-5", passed=True,
-        tokens_in=100, tokens_out=50, cost_usd=0.01, latency_s=12.5,
-        tool_call_count=4, diff="+fix", regressions=[],
+        task_id="t1",
+        run_index=0,
+        model="claude-sonnet-4-5",
+        passed=True,
+        tokens_in=100,
+        tokens_out=50,
+        cost_usd=0.01,
+        latency_s=12.5,
+        tool_call_count=4,
+        diff="+fix",
+        regressions=[],
     )
     assert result.error is None
     assert RunResult(**result.model_dump()) == result
@@ -34,8 +42,13 @@ def test_variance_report_schema():
     report = AggregateReport(
         variance=[
             VarianceReport(
-                task_id="t1", model="m", pass_rate=2 / 3, cost_mean=0.01,
-                cost_stddev=0.001, latency_mean=10.0, latency_stddev=1.5,
+                task_id="t1",
+                model="m",
+                pass_rate=2 / 3,
+                cost_mean=0.01,
+                cost_stddev=0.001,
+                latency_mean=10.0,
+                latency_stddev=1.5,
             )
         ],
         runs=[],

@@ -15,9 +15,7 @@ TOOLS: list[ToolSpec] = [
         description="Read a file from the repository. Returns its full contents.",
         parameters={
             "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "Path relative to repo root"}
-            },
+            "properties": {"path": {"type": "string", "description": "Path relative to repo root"}},
             "required": ["path"],
         },
     ),
@@ -52,14 +50,11 @@ TOOLS: list[ToolSpec] = [
     ToolSpec(
         name="run_tests",
         description=(
-            "Run a shell command in the sandbox (e.g. pytest). "
-            "Returns exit code and output."
+            "Run a shell command in the sandbox (e.g. pytest). Returns exit code and output."
         ),
         parameters={
             "type": "object",
-            "properties": {
-                "command": {"type": "string", "description": "Shell command to run"}
-            },
+            "properties": {"command": {"type": "string", "description": "Shell command to run"}},
             "required": ["command"],
         },
     ),
@@ -94,19 +89,13 @@ async def execute_tool(
         return f"error: {exc}"
 
 
-async def _edit(
-    executor: SandboxExecutor, handle: SandboxHandle, args: dict[str, Any]
-) -> str:
+async def _edit(executor: SandboxExecutor, handle: SandboxHandle, args: dict[str, Any]) -> str:
     content = await executor.read_file(handle, args["path"])
     old, new = args["old_string"], args["new_string"]
     count = content.count(old)
     if count == 0:
         # include current content so the agent can self-correct whitespace drift
-        hint = (
-            f"\nCurrent file content:\n{content}"
-            if len(content) <= 2_000
-            else ""
-        )
+        hint = f"\nCurrent file content:\n{content}" if len(content) <= 2_000 else ""
         return f"error: old_string not found in file{hint}"
     if count > 1:
         return f"error: old_string appears {count} times; make it more specific"

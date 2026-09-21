@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 from agentbench.models.run import TokenUsage
 
+StopReason = Literal["end_turn", "tool_use", "max_tokens", "error"]
+
 
 class ToolSpec(BaseModel):
     """Provider-neutral tool definition."""
@@ -35,4 +37,4 @@ class ProviderResponse(BaseModel):
     messages: list[Message]  # assistant message(s) produced this turn
     tool_calls: list[ToolCall]
     usage: TokenUsage
-    stop_reason: Literal["end_turn", "tool_use", "max_tokens", "error"]
+    stop_reason: StopReason
