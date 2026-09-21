@@ -109,9 +109,7 @@ def _model(model: str, group: list[RunResult]) -> ModelSummary:
         tampered_count=sum(1 for r in valid if r.tampered_tests),
         regressed_count=sum(1 for r in valid if r.regressions),
         # a partial total would read as the cost of the whole set
-        total_cost=(
-            None if unpriced else sum(r.cost_usd for r in valid)
-        ),
+        total_cost=(None if unpriced else sum(r.cost_usd for r in valid if r.cost_usd is not None)),
         n_unpriced=len(unpriced),
         latency_mean=statistics.fmean(r.latency_s for r in valid) if valid else None,
         tool_calls=_stat([r.tool_call_count for r in valid]),

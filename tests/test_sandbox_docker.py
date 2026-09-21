@@ -9,9 +9,10 @@ from agentbench.sandbox.docker_executor import DockerSandboxExecutor
 
 pytestmark = pytest.mark.docker
 
-_daemon_up = shutil.which("docker") is not None and subprocess.run(
-    ["docker", "info"], capture_output=True
-).returncode == 0
+_daemon_up = (
+    shutil.which("docker") is not None
+    and subprocess.run(["docker", "info"], capture_output=True).returncode == 0
+)
 
 
 @pytest.mark.skipif(not _daemon_up, reason="Docker daemon not available")

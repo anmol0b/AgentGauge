@@ -79,16 +79,12 @@ async def run_agent_loop(
 
         tool_call_count += len(response.tool_calls)
         for call in response.tool_calls:
-            output = await execute_tool(
-                call.name, call.arguments, executor, handle, exec_timeout_s
-            )
+            output = await execute_tool(call.name, call.arguments, executor, handle, exec_timeout_s)
             if call.name in _MUTATING_TOOLS and output.startswith(("wrote ", "edited ")):
                 # only a *successful* edit counts — a failed old_string match
                 # shouldn't stop the no-edit nudge
                 made_mutation = True
-            messages.append(
-                Message(role="tool", content=output, tool_call_id=call.id)
-            )
+            messages.append(Message(role="tool", content=output, tool_call_id=call.id))
 
     return AgentLoopResult(
         messages=messages,

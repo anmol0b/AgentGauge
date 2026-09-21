@@ -10,7 +10,8 @@ from jinja2 import Template
 
 from agentbench.models.report import AggregateReport
 
-_TEMPLATE = Template("""\
+_TEMPLATE = Template(
+    """\
 <!doctype html>
 <html><head><meta charset="utf-8"><title>AgentBench Report</title>
 <style>
@@ -201,7 +202,9 @@ parentheses.</p>
 </details>
 {% endfor %}
 </body></html>
-""", autoescape=True)
+""",
+    autoescape=True,
+)
 
 
 def render_html(

@@ -65,17 +65,21 @@ class OneEditProvider:
         self.turns += 1
         if self.turns == 1:
             call = ToolCall(
-                id="c1", name="write_file",
+                id="c1",
+                name="write_file",
                 arguments={"path": "calc.py", "content": "fixed"},
             )
             return ProviderResponse(
                 messages=[Message(role="assistant", content="", tool_calls=[call])],
-                tool_calls=[call], usage=TokenUsage(tokens_in=10, tokens_out=5),
+                tool_calls=[call],
+                usage=TokenUsage(tokens_in=10, tokens_out=5),
                 stop_reason="tool_use",
             )
         return ProviderResponse(
-            messages=[Message(role="assistant", content="done")], tool_calls=[],
-            usage=TokenUsage(tokens_in=10, tokens_out=5), stop_reason=self._stop_reason,
+            messages=[Message(role="assistant", content="done")],
+            tool_calls=[],
+            usage=TokenUsage(tokens_in=10, tokens_out=5),
+            stop_reason=self._stop_reason,
         )
 
     def compute_cost(self, usage) -> float:
@@ -86,16 +90,16 @@ def _task(tmp_path) -> Task:
     (tmp_path / "repo_src").mkdir()
     (tmp_path / "repo_src" / "calc.py").write_text("def subtract(a, b):\n    return a + b\n")
     return Task(
-        id="calc-bug", repo_url=str(tmp_path / "repo_src"), setup_commands=[],
+        id="calc-bug",
+        repo_url=str(tmp_path / "repo_src"),
+        setup_commands=[],
         failing_test_command="pytest test_calc.py::test_subtract",
     )
 
 
 async def test_run_once_records_stop_reason(tmp_path):
     executor = ScriptedExecutor()
-    result = await run_once(
-        _task(tmp_path), 0, "fake-model", executor, provider=OneEditProvider()
-    )
+    result = await run_once(_task(tmp_path), 0, "fake-model", executor, provider=OneEditProvider())
 
     assert result.error is None
     assert result.passed is True
@@ -108,7 +112,11 @@ async def test_run_once_records_stop_reason(tmp_path):
 async def test_run_once_flags_max_turns(tmp_path):
     """A failure needs a reason: out of turns is not the same as a wrong fix."""
     result = await run_once(
-        _task(tmp_path), 0, "fake-model", ScriptedExecutor(), max_turns=1,
+        _task(tmp_path),
+        0,
+        "fake-model",
+        ScriptedExecutor(),
+        max_turns=1,
         provider=OneEditProvider(),
     )
     assert result.stop_reason == "max_turns"
@@ -117,9 +125,7 @@ async def test_run_once_flags_max_turns(tmp_path):
 async def test_editing_tests_disqualifies_a_passing_run(tmp_path):
     """Exit code 0 is not a pass if the agent rewrote the test to get it."""
     executor = ScriptedExecutor(changed_files="calc.py\ntest_calc.py\n", test_exit_code=0)
-    result = await run_once(
-        _task(tmp_path), 0, "fake-model", executor, provider=OneEditProvider()
-    )
+    result = await run_once(_task(tmp_path), 0, "fake-model", executor, provider=OneEditProvider())
 
     assert result.tampered_tests == ["test_calc.py"]
     assert result.passed is False
@@ -192,7 +198,7 @@ async def test_regressions_empty_when_detection_worked_and_found_none(tmp_path):
     assert result.regressions == []
 
 
-async def test_stale_junit_report_is_deleted_before_each_pass(tmp_path):
+async def test_stale_junit_report_is_deleted_before_each_pass(tmp_path, monkeypatch):
     """Otherwise a failed 'after' pass reads back the baseline's report."""
     executor = ScriptedExecutor()
     seen: list[str] = []
@@ -202,7 +208,7 @@ async def test_stale_junit_report_is_deleted_before_each_pass(tmp_path):
         seen.append(" ".join(command))
         return await original(handle, command, timeout_s)
 
-    executor.exec = spy
+    monkeypatch.setattr(executor, "exec", spy)
     await run_once(_task(tmp_path), 0, "fake-model", executor, provider=OneEditProvider())
 
     removals = [c for c in seen if "rm -f" in c and "junit" in c]
@@ -219,8 +225,12 @@ from agentbench.orchestrator.runner import _materialize_repo  # noqa: E402
 
 
 def _git(cwd, *args):
-    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
-                   cwd=cwd, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+    )
 
 
 def _origin_repo(tmp_path):
@@ -231,8 +241,9 @@ def _origin_repo(tmp_path):
     (origin / "calc.py").write_text("buggy\n")
     _git(origin, "add", "-A")
     _git(origin, "commit", "-qm", "buggy")
-    buggy = subprocess.run(["git", "rev-parse", "HEAD"], cwd=origin,
-                           capture_output=True, text=True).stdout.strip()
+    buggy = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=origin, capture_output=True, text=True
+    ).stdout.strip()
     (origin / "calc.py").write_text("fixed\n")
     _git(origin, "add", "-A")
     _git(origin, "commit", "-qm", "fixed")
@@ -271,7 +282,6 @@ def test_materialize_copies_and_inits_a_local_path(tmp_path):
 async def test_run_once_records_repo_and_difficulty(tmp_path):
     task = _task(tmp_path)
     task.difficulty = "hard"
-    result = await run_once(task, 0, "fake-model", ScriptedExecutor(),
-                            provider=OneEditProvider())
+    result = await run_once(task, 0, "fake-model", ScriptedExecutor(), provider=OneEditProvider())
     assert result.repo_id == "repo_src"
     assert result.difficulty == "hard"

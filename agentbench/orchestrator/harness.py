@@ -7,7 +7,7 @@ import asyncio
 from agentbench.agent_loop.loop import DEFAULT_SYSTEM_PROMPT
 from agentbench.models.run import RunResult
 from agentbench.models.task import Task
-from agentbench.orchestrator.runner import run_once
+from agentbench.orchestrator.runner import DEFAULT_IMAGE, run_once
 from agentbench.providers import make_provider
 from agentbench.providers.base import ModelProvider
 from agentbench.sandbox.executor import SandboxExecutor
@@ -36,9 +36,13 @@ async def run_benchmark(
 
     async def one(task: Task, model: str, run_index: int) -> RunResult:
         async with semaphore:
-            kwargs = {"image": image} if image else {}
             result = await run_once(
-                task, run_index, model, executor, provider=providers.get(model), **kwargs
+                task,
+                run_index,
+                model,
+                executor,
+                image=image or DEFAULT_IMAGE,
+                provider=providers.get(model),
             )
             status = "PASS" if result.passed else "FAIL"
             if result.error:
@@ -53,9 +57,6 @@ async def run_benchmark(
             return result
 
     coros = [
-        one(task, model, i)
-        for task in tasks
-        for model in models
-        for i in range(runs_per_task)
+        one(task, model, i) for task in tasks for model in models for i in range(runs_per_task)
     ]
     return list(await asyncio.gather(*coros))

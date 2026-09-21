@@ -12,7 +12,7 @@ from agentbench.models.run import RunResult
 from agentbench.models.task import Task
 from agentbench.providers import make_provider
 from agentbench.providers.base import ModelProvider
-from agentbench.sandbox.executor import SandboxExecutor
+from agentbench.sandbox.executor import SandboxExecutor, SandboxHandle
 
 DEFAULT_IMAGE = "python:3.12-slim"
 TEST_TIMEOUT_S = 300
@@ -87,7 +87,8 @@ async def run_once(
                 handle, ["sh", "-c", "git diff --cached --name-only"], timeout_s=30
             )
             tampered = sorted(
-                path for path in changed.stdout.split("\n")
+                path
+                for path in changed.stdout.split("\n")
                 if path.strip() and _is_test_path(path.strip())
             )
             if tampered:
@@ -151,8 +152,16 @@ def _materialize_repo(repo_url: str, tmp: Path, repo_ref: str | None = None) -> 
         if not (dest / ".git").exists():
             _git(dest, "init", "-q")
             _git(dest, "add", "-A")
-            _git(dest, "-c", "user.email=bench@local", "-c", "user.name=bench",
-                 "commit", "-qm", "baseline")
+            _git(
+                dest,
+                "-c",
+                "user.email=bench@local",
+                "-c",
+                "user.name=bench",
+                "commit",
+                "-qm",
+                "baseline",
+            )
     else:
         subprocess.run(["git", "clone", "-q", repo_url, str(dest)], check=True)
     if repo_ref:
@@ -165,7 +174,7 @@ def _git(cwd: Path, *args: str) -> None:
 
 
 async def _failing_tests(
-    executor: SandboxExecutor, handle, task: Task
+    executor: SandboxExecutor, handle: SandboxHandle, task: Task
 ) -> set[str] | None:
     """Node ids of currently failing tests, via junitxml.
 
@@ -196,7 +205,7 @@ async def _failing_tests(
     return failing
 
 
-async def _instruction(executor: SandboxExecutor, handle, task: Task) -> str:
+async def _instruction(executor: SandboxExecutor, handle: SandboxHandle, task: Task) -> str:
     listing = await executor.exec(handle, ["git", "ls-files"], timeout_s=30)
     files = listing.stdout.strip() or "(listing unavailable)"
     return (

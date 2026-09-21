@@ -80,8 +80,7 @@ class RunStore:
         self._conn.execute("ALTER TABLE runs RENAME TO runs_old")
         self._conn.execute(_SCHEMA)
         self._conn.execute(
-            f"INSERT INTO runs (created_at, {_COLUMNS}) "
-            f"SELECT created_at, {_COLUMNS} FROM runs_old"
+            f"INSERT INTO runs (created_at, {_COLUMNS}) SELECT created_at, {_COLUMNS} FROM runs_old"
         )
         self._conn.execute("DROP TABLE runs_old")
 
@@ -90,12 +89,23 @@ class RunStore:
             f"INSERT INTO runs ({_COLUMNS}) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                result.task_id, result.run_index, result.model, int(result.passed),
-                result.tokens_in, result.tokens_out, result.cost_usd,
-                result.latency_s, result.tool_call_count, result.diff,
-                _dump_or_null(result.regressions), result.error, result.stop_reason,
+                result.task_id,
+                result.run_index,
+                result.model,
+                int(result.passed),
+                result.tokens_in,
+                result.tokens_out,
+                result.cost_usd,
+                result.latency_s,
+                result.tool_call_count,
+                result.diff,
+                _dump_or_null(result.regressions),
+                result.error,
+                result.stop_reason,
                 _dump_or_null(result.tampered_tests),
-                run_set_id or result.run_set_id, result.repo_id, result.difficulty,
+                run_set_id or result.run_set_id,
+                result.repo_id,
+                result.difficulty,
             ),
         )
         self._conn.commit()
@@ -117,17 +127,27 @@ class RunStore:
             "SELECT {cols} FROM runs WHERE run_set_id = ? ORDER BY id", (run_set_id,)
         )
 
-    def _select(self, sql: str, params: tuple = ()) -> list[RunResult]:
+    def _select(self, sql: str, params: tuple[object, ...] = ()) -> list[RunResult]:
         rows = self._conn.execute(sql.format(cols=_COLUMNS), params).fetchall()
         return [
             RunResult(
-                task_id=r[0], run_index=r[1], model=r[2], passed=bool(r[3]),
-                tokens_in=r[4], tokens_out=r[5], cost_usd=r[6], latency_s=r[7],
-                tool_call_count=r[8], diff=r[9],
+                task_id=r[0],
+                run_index=r[1],
+                model=r[2],
+                passed=bool(r[3]),
+                tokens_in=r[4],
+                tokens_out=r[5],
+                cost_usd=r[6],
+                latency_s=r[7],
+                tool_call_count=r[8],
+                diff=r[9],
                 regressions=json.loads(r[10]) if r[10] is not None else None,
-                error=r[11], stop_reason=r[12],
+                error=r[11],
+                stop_reason=r[12],
                 tampered_tests=json.loads(r[13]) if r[13] is not None else None,
-                run_set_id=r[14] or "", repo_id=r[15], difficulty=r[16],
+                run_set_id=r[14] or "",
+                repo_id=r[15],
+                difficulty=r[16],
             )
             for r in rows
         ]

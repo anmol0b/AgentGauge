@@ -1,15 +1,26 @@
 import sqlite3
+from typing import Any
 
 from agentbench.models.run import RunResult
 from agentbench.storage.db import RunStore
 
 
 def _result(**overrides):
-    base = dict(
-        task_id="t1", run_index=0, model="claude-sonnet-4-5", passed=True,
-        tokens_in=100, tokens_out=50, cost_usd=0.01, latency_s=12.0,
-        tool_call_count=3, diff="+fix", regressions=["pkg::test_broke"],
-        error=None, stop_reason="end_turn", tampered_tests=[],
+    base: dict[str, Any] = dict(
+        task_id="t1",
+        run_index=0,
+        model="claude-sonnet-4-5",
+        passed=True,
+        tokens_in=100,
+        tokens_out=50,
+        cost_usd=0.01,
+        latency_s=12.0,
+        tool_call_count=3,
+        diff="+fix",
+        regressions=["pkg::test_broke"],
+        error=None,
+        stop_reason="end_turn",
+        tampered_tests=[],
     )
     return RunResult(**(base | overrides))
 
@@ -46,7 +57,9 @@ def test_run_sets_are_isolated(tmp_path):
     store.insert_many([_result(passed=False)], run_set_id="bbb")
 
     first, second, everything = (
-        store.runs_for_set("aaa"), store.runs_for_set("bbb"), store.all_runs()
+        store.runs_for_set("aaa"),
+        store.runs_for_set("bbb"),
+        store.all_runs(),
     )
     store.close()
 

@@ -9,10 +9,11 @@ import tarfile
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import docker.errors
+from docker.client import DockerClient, from_env
 
-import docker
 from agentbench.sandbox.executor import ExecResult, SandboxHandle
 from agentbench.sandbox.policy import SandboxPolicy
 
@@ -29,17 +30,17 @@ class DockerSandboxExecutor:
         # Fail fast if the daemon is unreachable, but don't reuse this client
         # across threads: docker-py wraps a requests.Session, which is not
         # documented as thread-safe, and runs execute on a thread pool.
-        docker.from_env().ping()
+        from_env().ping()
         self._thread_local = threading.local()
         self._has_timeout: dict[str, bool] = {}
         self._probe_lock = threading.Lock()
 
     @property
-    def _client(self) -> docker.DockerClient:
+    def _client(self) -> DockerClient:
         """One client per worker thread."""
-        client = getattr(self._thread_local, "client", None)
+        client: DockerClient | None = getattr(self._thread_local, "client", None)
         if client is None:
-            client = docker.from_env()
+            client = from_env()
             self._thread_local.client = client
         return client
 
@@ -65,9 +66,7 @@ class DockerSandboxExecutor:
         container.put_archive(workdir, _tar_directory(repo_path))
         # repo files keep the host uid after untar; container git runs as root
         # and would refuse the repo as "dubious ownership" without this
-        container.exec_run(
-            ["git", "config", "--global", "--add", "safe.directory", workdir]
-        )
+        container.exec_run(["git", "config", "--global", "--add", "safe.directory", workdir])
         return SandboxHandle(id=container.id, workdir=workdir)
 
     def _image_present(self, image: str) -> bool:
@@ -83,9 +82,7 @@ class DockerSandboxExecutor:
                 time.sleep(1)
         return False
 
-    async def exec(
-        self, handle: SandboxHandle, command: list[str], timeout_s: int
-    ) -> ExecResult:
+    async def exec(self, handle: SandboxHandle, command: list[str], timeout_s: int) -> ExecResult:
         try:
             return await asyncio.wait_for(
                 asyncio.to_thread(self._exec_sync, handle, command, timeout_s),
@@ -103,9 +100,7 @@ class DockerSandboxExecutor:
                 timed_out=True,
             )
 
-    def _exec_sync(
-        self, handle: SandboxHandle, command: list[str], timeout_s: int
-    ) -> ExecResult:
+    def _exec_sync(self, handle: SandboxHandle, command: list[str], timeout_s: int) -> ExecResult:
         container = self._client.containers.get(handle.id)
         wrapped = self._with_timeout(container, handle.id, command, timeout_s)
         exit_code, output = container.exec_run(wrapped, workdir=handle.workdir, demux=True)
@@ -120,7 +115,7 @@ class DockerSandboxExecutor:
         )
 
     def _with_timeout(
-        self, container, container_id: str, command: list[str], timeout_s: int
+        self, container: Any, container_id: str, command: list[str], timeout_s: int
     ) -> list[str]:
         """Run under coreutils `timeout` so the deadline actually kills it.
 
@@ -131,7 +126,7 @@ class DockerSandboxExecutor:
             return command
         return ["timeout", "--signal=KILL", str(timeout_s), *command]
 
-    def _timeout_available(self, container, container_id: str) -> bool:
+    def _timeout_available(self, container: Any, container_id: str) -> bool:
         """Probe once per container — not every image ships coreutils."""
         with self._probe_lock:
             if container_id not in self._has_timeout:

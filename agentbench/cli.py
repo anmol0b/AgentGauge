@@ -26,22 +26,29 @@ def parse_args() -> argparse.Namespace:
         description="Benchmark AI coding agents on real repo tasks, in Docker sandboxes.",
     )
     parser.add_argument("--tasks", required=True, help="YAML task set file")
-    parser.add_argument("--repo", default=None,
-                        help="Override repo_url for every task (git URL or local path)")
     parser.add_argument(
-        "--model", action="append", required=True,
+        "--repo", default=None, help="Override repo_url for every task (git URL or local path)"
+    )
+    parser.add_argument(
+        "--model",
+        action="append",
+        required=True,
         help="Model to benchmark (repeatable, e.g. --model claude-sonnet-4-5 --model gpt-4o)",
     )
     parser.add_argument("--runs-per-task", type=int, default=3)
     parser.add_argument("--concurrency", type=int, default=4)
-    parser.add_argument("--image", default="agentbench-base:py3.12",
-                        help="Sandbox image (must contain test deps; no network in sandbox)")
+    parser.add_argument(
+        "--image",
+        default="agentbench-base:py3.12",
+        help="Sandbox image (must contain test deps; no network in sandbox)",
+    )
     parser.add_argument("--db", default="agentbench.db", help="SQLite run history path")
     parser.add_argument("--out", default="report.html", help="HTML report output path")
     parser.add_argument(
-        "--all-history", action="store_true",
+        "--all-history",
+        action="store_true",
         help="Report over every run ever recorded in --db, not just this invocation. "
-             "Mixes separate benchmark sessions into one pass rate — off by default.",
+        "Mixes separate benchmark sessions into one pass rate — off by default.",
     )
     return parser.parse_args()
 
@@ -76,10 +83,12 @@ async def amain() -> None:
     print(f"\nwrote {out} ({len(results)} runs recorded in {args.db}, set {run_set_id})\n")
 
     for m in report.models:
+        ci = m.pass_rate_ci
         if m.pass_rate is None:
             rate = "n/a (every run errored)"
+        elif ci is None:
+            rate = f"{m.pass_rate:.0%}"
         else:
-            ci = m.pass_rate_ci
             rate = f"{m.pass_rate:.0%} (95% CI {ci.low:.0%}-{ci.high:.0%})"
         cost = "unpriced" if m.total_cost is None else f"${m.total_cost:.4f}"
         print(f"  {m.model}: {rate} over {m.n_valid} valid runs, total {cost}")
@@ -94,8 +103,7 @@ async def amain() -> None:
             print(f"      {', '.join(notes)}")
 
     if len(report.models) > 1:
-        print("\n  Overlapping confidence intervals mean this run does not "
-              "separate the models.")
+        print("\n  Overlapping confidence intervals mean this run does not separate the models.")
 
 
 def main() -> None:

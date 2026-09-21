@@ -4,12 +4,29 @@ from agentbench.models.run import RunResult
 from agentbench.reporting.aggregate import aggregate
 
 
-def _run(task_id="t1", model="m1", run_index=0, passed=True, cost=0.01, latency=10.0,
-         error=None, tampered=None):
+def _run(
+    task_id="t1",
+    model="m1",
+    run_index=0,
+    passed=True,
+    cost=0.01,
+    latency=10.0,
+    error=None,
+    tampered=None,
+):
     return RunResult(
-        task_id=task_id, run_index=run_index, model=model, passed=passed,
-        tokens_in=100, tokens_out=50, cost_usd=cost, latency_s=latency,
-        tool_call_count=3, diff="", regressions=[], error=error,
+        task_id=task_id,
+        run_index=run_index,
+        model=model,
+        passed=passed,
+        tokens_in=100,
+        tokens_out=50,
+        cost_usd=cost,
+        latency_s=latency,
+        tool_call_count=3,
+        diff="",
+        regressions=[],
+        error=error,
         tampered_tests=tampered or [],
     )
 
@@ -87,6 +104,7 @@ def test_pass_rate_carries_a_confidence_interval():
     """3/3 is not 100% +/- 0 — the interval has to say what N supports."""
     v = aggregate([_run(run_index=i) for i in range(3)]).variance[0]
     assert v.pass_rate == 1.0
+    assert v.pass_rate_ci is not None
     assert v.pass_rate_ci.high == 1.0
     assert v.pass_rate_ci.low < 0.5  # three runs support very little
 
@@ -94,12 +112,14 @@ def test_pass_rate_carries_a_confidence_interval():
 def test_interval_narrows_with_more_runs():
     few = aggregate([_run(run_index=i) for i in range(3)]).variance[0]
     many = aggregate([_run(run_index=i) for i in range(50)]).variance[0]
+    assert few.pass_rate_ci is not None and many.pass_rate_ci is not None
     assert many.pass_rate_ci.low > few.pass_rate_ci.low
 
 
 def test_model_summary_totals_cost_across_tasks():
     runs = [
-        _run(task_id="t1", cost=0.01), _run(task_id="t2", cost=0.02),
+        _run(task_id="t1", cost=0.01),
+        _run(task_id="t2", cost=0.02),
     ]
     summary = aggregate(runs).models[0]
     assert summary.total_cost == pytest.approx(0.03)
@@ -117,7 +137,8 @@ def test_model_cost_total_withheld_when_any_run_is_unpriced():
 
 def test_difficulty_breakdown_orders_easy_to_hard():
     runs = [
-        _run(run_index=0, task_id="h"), _run(run_index=1, task_id="e"),
+        _run(run_index=0, task_id="h"),
+        _run(run_index=1, task_id="e"),
     ]
     runs[0].difficulty, runs[1].difficulty = "hard", "easy"
     order = [d.difficulty for d in aggregate(runs).by_difficulty]
