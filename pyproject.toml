@@ -36,6 +36,9 @@ markers = ["docker: tests requiring a running Docker daemon"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Fixture repos are benchmark inputs, not project code: they contain seeded
+# bugs on purpose, and `ruff check --fix` could quietly repair one.
+extend-exclude = ["agentbench/tasks/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
