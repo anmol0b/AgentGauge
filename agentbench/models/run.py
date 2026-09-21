@@ -21,3 +21,13 @@ class RunResult(BaseModel):
     diff: str
     regressions: list[str]  # other tests that broke
     error: str | None = None
+    # why the agent loop ended: end_turn | max_turns | max_tokens | error.
+    # None for runs recorded before this was tracked.
+    stop_reason: str | None = None
+    # test files the agent modified. Non-empty means the run is disqualified:
+    # a model that edits the test it was asked to fix can pass by cheating.
+    # None means the check never ran (run errored early, or a pre-v2 row) —
+    # distinct from [], which means it ran and found nothing.
+    tampered_tests: list[str] | None = None
+    # which CLI invocation produced this run; "" for pre-existing rows
+    run_set_id: str = ""

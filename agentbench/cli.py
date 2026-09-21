@@ -7,6 +7,7 @@ Usage:
 
 import argparse
 import asyncio
+import uuid
 from pathlib import Path
 
 import yaml
@@ -37,6 +38,11 @@ def parse_args() -> argparse.Namespace:
                         help="Sandbox image (must contain test deps; no network in sandbox)")
     parser.add_argument("--db", default="agentbench.db", help="SQLite run history path")
     parser.add_argument("--out", default="report.html", help="HTML report output path")
+    parser.add_argument(
+        "--all-history", action="store_true",
+        help="Report over every run ever recorded in --db, not just this invocation. "
+             "Mixes separate benchmark sessions into one pass rate — off by default.",
+    )
     return parser.parse_args()
 
 
@@ -47,6 +53,7 @@ async def amain() -> None:
         for task in taskset.tasks:
             task.repo_url = args.repo
     executor = DockerSandboxExecutor()
+    run_set_id = uuid.uuid4().hex[:12]
 
     results = await run_benchmark(
         tasks=taskset.tasks,
@@ -59,16 +66,23 @@ async def amain() -> None:
 
     store = RunStore(args.db)
     try:
-        store.insert_many(results)
-        report = aggregate(store.all_runs())
+        store.insert_many(results, run_set_id)
+        scope = store.all_runs() if args.all_history else store.runs_for_set(run_set_id)
+        report = aggregate(scope)
     finally:
         store.close()
 
-    out = render_html(report, args.out)
-    print(f"\nwrote {out} ({len(results)} runs recorded in {args.db})")
+    out = render_html(report, args.out, concurrency=args.concurrency)
+    print(f"\nwrote {out} ({len(results)} runs recorded in {args.db}, set {run_set_id})")
     for v in report.variance:
-        print(f"  {v.task_id} | {v.model}: pass rate {v.pass_rate:.0%}, "
-              f"cost ${v.cost_mean:.4f}±{v.cost_stddev:.4f}")
+        rate = "n/a (all runs errored)" if v.pass_rate is None else f"{v.pass_rate:.0%}"
+        line = (f"  {v.task_id} | {v.model}: pass rate {rate} of {v.n_valid} valid runs, "
+                f"cost ${v.cost_mean:.4f}±{v.cost_stddev:.4f}")
+        if v.error_rate:
+            line += f", {v.error_rate:.0%} harness errors"
+        if v.tampered_count:
+            line += f", {v.tampered_count} disqualified (edited tests)"
+        print(line)
 
 
 def main() -> None:

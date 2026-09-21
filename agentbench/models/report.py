@@ -8,11 +8,18 @@ from agentbench.models.run import RunResult
 class VarianceReport(BaseModel):
     task_id: str
     model: str
-    pass_rate: float  # across N runs
-    cost_mean: float
-    cost_stddev: float
-    latency_mean: float
-    latency_stddev: float
+    n_runs: int = 0  # all attempts, including ones the harness errored on
+    n_valid: int = 0  # attempts that actually produced a model verdict
+    # passes / n_valid. None when every attempt errored — reporting 0% there
+    # would blame the model for a harness failure.
+    pass_rate: float | None = None
+    error_rate: float = 0.0  # harness/infra failures / n_runs
+    tampered_count: int = 0  # valid runs disqualified for editing tests
+    # cost/latency are means over valid runs only, to match pass_rate
+    cost_mean: float = 0.0
+    cost_stddev: float = 0.0
+    latency_mean: float = 0.0
+    latency_stddev: float = 0.0
 
 
 class AggregateReport(BaseModel):

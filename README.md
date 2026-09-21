@@ -62,6 +62,23 @@ from the host), so test dependencies must be baked into the image.
 Results are appended to `agentbench.db` (SQLite); the HTML report shows pass rate,
 cost/latency mean±stddev per (task × model), individual runs, and the agent's diffs.
 
+Each invocation gets a run-set id and the report covers **only that invocation** —
+pass `--all-history` to aggregate every run in the database instead (which mixes
+separate sessions into one pass rate).
+
+### Scoring rules
+
+- **Harness errors are not model failures.** A Docker fault, rate limit or failed
+  setup command is reported as an error rate and excluded from the pass-rate
+  denominator. If every attempt errored, pass rate is `n/a`, never 0%.
+- **Editing tests disqualifies a run.** Grading is the exit code of the failing
+  test command, so an agent that rewrites the test would otherwise score a pass.
+  Runs that touch test files are recorded and never counted as passing.
+- **Every run records why the agent stopped** (`end_turn`, `max_turns`,
+  `max_tokens`), so a failure can be attributed rather than guessed at.
+- Latency is measured under concurrency and is not comparable across different
+  `--concurrency` settings; the report states this.
+
 ### Development
 
 ```sh

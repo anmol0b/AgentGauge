@@ -31,8 +31,10 @@ async def run_once(
     cost = 0.0
     diff = ""
     error: str | None = None
+    stop_reason: str | None = None
     passed = False
     regressions: list[str] = []
+    tampered: list[str] | None = None
     handle = None
 
     with tempfile.TemporaryDirectory(prefix=f"agentbench-{task.id}-") as tmp:
@@ -58,6 +60,7 @@ async def run_once(
             tokens_out = loop_result.usage.tokens_out
             cost = loop_result.cost_usd
             tool_call_count = loop_result.tool_call_count
+            stop_reason = loop_result.stop_reason
 
             check = await executor.exec(
                 handle, ["sh", "-c", task.failing_test_command], TEST_TIMEOUT_S
@@ -67,10 +70,24 @@ async def run_once(
             after = await _failing_tests(executor, handle, task)
             regressions = sorted(after - baseline)
 
+            await executor.exec(
+                handle, ["sh", "-c", "git add -A >/dev/null 2>&1; true"], timeout_s=30
+            )
+            changed = await executor.exec(
+                handle, ["sh", "-c", "git diff --cached --name-only"], timeout_s=30
+            )
+            tampered = sorted(
+                path for path in changed.stdout.split("\n")
+                if path.strip() and _is_test_path(path.strip())
+            )
+            if tampered:
+                # The agent was told not to touch tests. Editing the test it was
+                # asked to satisfy turns the exit-code grade into a rubber stamp,
+                # so a tampered run never counts as a pass.
+                passed = False
+
             diff_result = await executor.exec(
-                handle,
-                ["sh", "-c", "git add -A >/dev/null 2>&1; git diff --cached"],
-                timeout_s=30,
+                handle, ["sh", "-c", "git diff --cached"], timeout_s=30
             )
             diff = diff_result.stdout
         except Exception as exc:
@@ -92,6 +109,20 @@ async def run_once(
         diff=diff,
         regressions=regressions,
         error=error,
+        stop_reason=stop_reason,
+        tampered_tests=tampered,
+    )
+
+
+def _is_test_path(path: str) -> bool:
+    """Whether `path` looks like test code the agent was supposed to leave alone."""
+    parts = Path(path).parts
+    name = Path(path).name
+    return (
+        name == "conftest.py"
+        or name.startswith("test_")
+        or name.endswith(("_test.py", "_test.js", "_test.go", ".test.ts", ".test.js"))
+        or any(part in ("test", "tests", "__tests__", "spec") for part in parts[:-1])
     )
 
 
@@ -142,5 +173,6 @@ async def _instruction(executor: SandboxExecutor, handle, task: Task) -> str:
         f"Run the failing test, read the relevant source file with read_file, "
         f"find the root cause, and apply the fix with the edit or write_file tool. "
         f"Then re-run the failing test to verify it passes. "
+        f"Do not modify test files — a run that edits tests is disqualified. "
         f"Do not break any other tests (full suite: `{task.full_test_command}`)."
     )
