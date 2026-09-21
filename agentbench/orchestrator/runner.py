@@ -13,6 +13,7 @@ from agentbench.models.task import Task
 from agentbench.providers import make_provider
 from agentbench.providers.base import ModelProvider
 from agentbench.sandbox.executor import SandboxExecutor, SandboxHandle
+from agentbench.sandbox.protocol import HostPathRepo
 
 DEFAULT_IMAGE = "python:3.12-slim"
 TEST_TIMEOUT_S = 300
@@ -45,17 +46,23 @@ async def run_once(
     regressions: list[str] | None = None
     tampered: list[str] | None = None
     handle = None
+    # Phase timings. A run's wall-clock is dominated by model inference, so
+    # these are what say whether sandbox work is worth optimizing at all.
+    setup_s = agent_s = grading_s = 0.0
 
     with tempfile.TemporaryDirectory(prefix=f"agentbench-{task.id}-") as tmp:
         try:
             repo_path = _materialize_repo(task.repo_url, Path(tmp), task.repo_ref)
-            handle = await executor.start(repo_path, image)
+            handle = await executor.start(HostPathRepo(path=str(repo_path)), image)
             for command in task.setup_commands:
                 result = await executor.exec(handle, ["sh", "-c", command], SETUP_TIMEOUT_S)
                 if result.exit_code != 0:
                     raise RuntimeError(f"setup command failed: {command}\n{result.stderr}")
 
             baseline = await _failing_tests(executor, handle, task)
+            setup_s = time.monotonic() - started
+
+            agent_started = time.monotonic()
 
             run_provider = provider or make_provider(model, system=DEFAULT_SYSTEM_PROMPT)
             loop_result = await run_agent_loop(
@@ -70,7 +77,9 @@ async def run_once(
             cost = loop_result.cost_usd
             tool_call_count = loop_result.tool_call_count
             stop_reason = loop_result.stop_reason
+            agent_s = time.monotonic() - agent_started
 
+            grading_started = time.monotonic()
             check = await executor.exec(
                 handle, ["sh", "-c", task.failing_test_command], TEST_TIMEOUT_S
             )
@@ -101,6 +110,7 @@ async def run_once(
                 handle, ["sh", "-c", "git diff --cached"], timeout_s=30
             )
             diff = diff_result.stdout
+            grading_s = time.monotonic() - grading_started
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
         finally:
@@ -118,6 +128,9 @@ async def run_once(
         tokens_out=tokens_out,
         cost_usd=cost,
         latency_s=time.monotonic() - started,
+        setup_s=setup_s,
+        agent_s=agent_s,
+        grading_s=grading_s,
         tool_call_count=tool_call_count,
         diff=diff,
         regressions=regressions,

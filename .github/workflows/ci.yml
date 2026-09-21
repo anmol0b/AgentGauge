@@ -88,7 +88,10 @@ jobs:
       # The one test that needs a daemon. It is skipped on laptops, so without
       # this job the Docker executor — the component that actually isolates
       # untrusted agent output — would never be exercised anywhere.
-      - name: Docker integration test
+      # Includes tests/conformance/ against the Docker executor: the contract
+      # every implementation must satisfy, and the only place the process,
+      # timeout and streaming halves of it are actually exercised.
+      - name: Docker integration and conformance tests
         run: pytest tests/ -m docker -v -rs
 
   audit:

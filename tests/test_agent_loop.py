@@ -1,12 +1,10 @@
 """Agent loop tests with a scripted fake provider + in-memory executor."""
 
-from pathlib import Path
-
 from agentbench.agent_loop.loop import run_agent_loop
 from agentbench.agent_loop.tools import execute_tool
 from agentbench.models.provider import Message, ProviderResponse, ToolCall
 from agentbench.models.run import TokenUsage
-from tests.fakes import FakeExecutor
+from tests.fakes import FakeExecutor, host_path
 
 
 class ScriptedProvider:
@@ -53,13 +51,13 @@ async def test_loop_executes_tools_then_stops():
             _end_response(),
         ]
     )
-    handle = await executor.start(Path("."), "img")
+    handle = await executor.start(host_path("."), "img")
     result = await run_agent_loop(provider, executor, handle, "fix it")
     assert result.stop_reason == "end_turn"
     assert result.tool_call_count == 1
     assert result.usage.tokens_in == 20 and result.usage.tokens_out == 10
     assert result.cost_usd == 0.002
-    assert executor.files["a.py"] == "fixed"
+    assert executor.text("a.py") == "fixed"
     # tool result was fed back into the message history
     assert any(m.role == "tool" and m.tool_call_id == "c1" for m in result.messages)
 
@@ -73,10 +71,10 @@ async def test_loop_nudges_when_agent_stops_without_editing():
             _end_response(),
         ]
     )
-    handle = await executor.start(Path("."), "img")
+    handle = await executor.start(host_path("."), "img")
     result = await run_agent_loop(provider, executor, handle, "fix it")
     assert result.stop_reason == "end_turn"
-    assert executor.files["a.py"] == "fixed"
+    assert executor.text("a.py") == "fixed"
     assert any("have not modified any files" in m.content for m in result.messages)
 
 
@@ -84,7 +82,7 @@ async def test_loop_hits_max_turns():
     executor = FakeExecutor()
     provider = ScriptedProvider([_tool_use_response()])
     result = await run_agent_loop(
-        provider, executor, await executor.start(Path("."), "img"), "fix it", max_turns=3
+        provider, executor, await executor.start(host_path("."), "img"), "fix it", max_turns=3
     )
     assert result.stop_reason == "max_turns"
     assert result.tool_call_count == 3
@@ -92,7 +90,7 @@ async def test_loop_hits_max_turns():
 
 async def test_edit_tool():
     executor = FakeExecutor(files={"a.py": "x = 1\ny = 2\n"})
-    handle = await executor.start(Path("."), "img")
+    handle = await executor.start(host_path("."), "img")
 
     ok = await execute_tool(
         "edit",
@@ -102,7 +100,7 @@ async def test_edit_tool():
         10,
     )
     assert ok.startswith("edited")
-    assert executor.files["a.py"] == "x = 42\ny = 2\n"
+    assert executor.text("a.py") == "x = 42\ny = 2\n"
 
     missing = await execute_tool(
         "edit",
@@ -113,7 +111,7 @@ async def test_edit_tool():
     )
     assert "not found" in missing
 
-    executor.files["b.py"] = "dup dup"
+    executor.files["b.py"] = b"dup dup"
     ambiguous = await execute_tool(
         "edit",
         {"path": "b.py", "old_string": "dup", "new_string": "z"},
@@ -126,7 +124,6 @@ async def test_edit_tool():
 
 async def test_tool_error_goes_back_to_agent():
     executor = FakeExecutor()
-    output = await execute_tool(
-        "read_file", {"path": "missing.py"}, executor, await executor.start(Path("."), "img"), 10
-    )
+    handle = await executor.start(host_path("."), "img")
+    output = await execute_tool("read_file", {"path": "missing.py"}, executor, handle, 10)
     assert output.startswith("error:")

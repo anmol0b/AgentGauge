@@ -14,8 +14,14 @@ from typing import Any
 import docker.errors
 from docker.client import DockerClient, from_env
 
-from agentbench.sandbox.executor import ExecResult, SandboxHandle
 from agentbench.sandbox.policy import SandboxPolicy
+from agentbench.sandbox.protocol import (
+    ExecResult,
+    OutputChunk,
+    OutputSink,
+    RepoSource,
+    SandboxHandle,
+)
 
 # Exit codes GNU coreutils `timeout` uses when it had to stop the command.
 _TIMEOUT_EXIT_CODES = {124, 137}
@@ -29,7 +35,7 @@ class DockerSandboxExecutor:
         self._policy = policy or SandboxPolicy()
         # Fail fast if the daemon is unreachable, but don't reuse this client
         # across threads: docker-py wraps a requests.Session, which is not
-        # documented as thread-safe, and runs execute on a thread pool.
+        # documented as thread-safe, and execs run on a thread pool.
         from_env().ping()
         self._thread_local = threading.local()
         self._has_timeout: dict[str, bool] = {}
@@ -44,10 +50,17 @@ class DockerSandboxExecutor:
             self._thread_local.client = client
         return client
 
-    async def start(self, repo_path: Path, image: str) -> SandboxHandle:
-        return await asyncio.to_thread(self._start_sync, repo_path, image)
+    # --- lifecycle --------------------------------------------------------
 
-    def _start_sync(self, repo_path: Path, image: str) -> SandboxHandle:
+    async def start(
+        self,
+        repo: RepoSource,
+        image: str,
+        policy: SandboxPolicy | None = None,
+    ) -> SandboxHandle:
+        return await asyncio.to_thread(self._start_sync, repo, image, policy or self._policy)
+
+    def _start_sync(self, repo: RepoSource, image: str, policy: SandboxPolicy) -> SandboxHandle:
         workdir = "/repo"
         if not self._image_present(image):
             self._client.images.pull(image)
@@ -55,15 +68,15 @@ class DockerSandboxExecutor:
             image,
             command="sleep infinity",
             working_dir=workdir,
-            mem_limit=self._policy.mem_limit,
-            nano_cpus=self._policy.nano_cpus,
-            pids_limit=self._policy.pids_limit,
-            network_mode=self._policy.network_mode,
+            mem_limit=policy.mem_limit,
+            nano_cpus=policy.nano_cpus,
+            pids_limit=policy.pids_limit,
+            network_mode=policy.network_mode,
             detach=True,
         )
         container.start()
         container.exec_run(["mkdir", "-p", workdir])
-        container.put_archive(workdir, _tar_directory(repo_path))
+        container.put_archive(workdir, _tar_directory(Path(repo.path)))
         # repo files keep the host uid after untar; container git runs as root
         # and would refuse the repo as "dubious ownership" without this
         container.exec_run(["git", "config", "--global", "--add", "safe.directory", workdir])
@@ -82,10 +95,38 @@ class DockerSandboxExecutor:
                 time.sleep(1)
         return False
 
-    async def exec(self, handle: SandboxHandle, command: list[str], timeout_s: int) -> ExecResult:
+    async def teardown(self, handle: SandboxHandle) -> None:
+        def _remove() -> None:
+            try:
+                self._client.containers.get(handle.id).remove(force=True)
+            except docker.errors.NotFound:
+                pass  # already gone: teardown is idempotent
+            finally:
+                self._has_timeout.pop(handle.id, None)
+
+        await asyncio.to_thread(_remove)
+
+    # --- exec -------------------------------------------------------------
+
+    async def exec(
+        self,
+        handle: SandboxHandle,
+        command: list[str],
+        timeout_s: int,
+        on_output: OutputSink | None = None,
+    ) -> ExecResult:
+        sink: OutputSink | None = None
+        if on_output is not None:
+            # Output arrives on a worker thread; hop back to the event loop so
+            # the caller's sink runs where the caller expects it to.
+            loop = asyncio.get_running_loop()
+
+            def sink(chunk: OutputChunk) -> None:
+                loop.call_soon_threadsafe(on_output, chunk)
+
         try:
             return await asyncio.wait_for(
-                asyncio.to_thread(self._exec_sync, handle, command, timeout_s),
+                asyncio.to_thread(self._exec_sync, handle, command, timeout_s, sink),
                 timeout=timeout_s + _HOST_TIMEOUT_GRACE_S,
             )
         except TimeoutError:
@@ -100,17 +141,43 @@ class DockerSandboxExecutor:
                 timed_out=True,
             )
 
-    def _exec_sync(self, handle: SandboxHandle, command: list[str], timeout_s: int) -> ExecResult:
-        container = self._client.containers.get(handle.id)
+    def _exec_sync(
+        self,
+        handle: SandboxHandle,
+        command: list[str],
+        timeout_s: int,
+        sink: OutputSink | None,
+    ) -> ExecResult:
+        client = self._client
+        container = client.containers.get(handle.id)
         wrapped = self._with_timeout(container, handle.id, command, timeout_s)
-        exit_code, output = container.exec_run(wrapped, workdir=handle.workdir, demux=True)
-        stdout, stderr = output
+
+        # The low-level API is used rather than exec_run because streaming and
+        # the exit code cannot be had together from the high-level helper: with
+        # stream=True it reports None for the code, so the exec is inspected
+        # afterwards by id.
+        exec_id = client.api.exec_create(handle.id, wrapped, workdir=handle.workdir)["Id"]
+        stdout_parts: list[str] = []
+        stderr_parts: list[str] = []
+        for out, err in client.api.exec_start(exec_id, stream=True, demux=True):
+            for raw, kind, parts in (
+                (out, "stdout", stdout_parts),
+                (err, "stderr", stderr_parts),
+            ):
+                if not raw:
+                    continue
+                text = raw.decode("utf-8", errors="replace")
+                if sink is not None:
+                    sink(OutputChunk(kind=kind, data=text))  # type: ignore[arg-type]
+                else:
+                    parts.append(text)  # only buffer when nobody is consuming
+
+        exit_code = client.api.exec_inspect(exec_id).get("ExitCode")
         timed_out = exit_code in _TIMEOUT_EXIT_CODES and wrapped is not command
         return ExecResult(
-            exit_code=exit_code,
-            stdout=(stdout or b"").decode("utf-8", errors="replace"),
-            stderr=(stderr or b"").decode("utf-8", errors="replace")
-            + (f"\ntimed out after {timeout_s}s" if timed_out else ""),
+            exit_code=-1 if exit_code is None else exit_code,
+            stdout="".join(stdout_parts),
+            stderr="".join(stderr_parts) + (f"\ntimed out after {timeout_s}s" if timed_out else ""),
             timed_out=timed_out,
         )
 
@@ -119,8 +186,9 @@ class DockerSandboxExecutor:
     ) -> list[str]:
         """Run under coreutils `timeout` so the deadline actually kills it.
 
-        Without this, a host-side timeout returns while the command keeps
-        running and holds the container's single CPU for every later exec.
+        Docker's Engine API cannot kill a running exec (moby#35703), so without
+        this a host-side timeout returns while the command keeps running and
+        holds the container's single CPU for every later exec.
         """
         if not self._timeout_available(container, container_id):
             return command
@@ -134,38 +202,53 @@ class DockerSandboxExecutor:
                 self._has_timeout[container_id] = code == 0
             return self._has_timeout[container_id]
 
-    async def read_file(self, handle: SandboxHandle, path: str) -> str:
-        result = await self.exec(handle, ["cat", path], timeout_s=30)
-        if result.exit_code != 0:
-            raise FileNotFoundError(f"{path}: {result.stderr.strip()}")
-        return result.stdout
+    # --- files ------------------------------------------------------------
 
-    async def write_file(self, handle: SandboxHandle, path: str, content: str) -> None:
-        await asyncio.to_thread(self._write_file_sync, handle, path, content)
+    async def read_bytes(self, handle: SandboxHandle, path: str) -> bytes:
+        return await asyncio.to_thread(self._read_bytes_sync, handle, path)
 
-    def _write_file_sync(self, handle: SandboxHandle, path: str, content: str) -> None:
+    def _read_bytes_sync(self, handle: SandboxHandle, path: str) -> bytes:
         container = self._client.containers.get(handle.id)
-        target = Path(path)
-        parent = target.parent if target.is_absolute() else Path(handle.workdir) / target.parent
-        container.exec_run(["mkdir", "-p", str(parent)])
+        try:
+            stream, _stat = container.get_archive(_absolute(handle, path))
+        except docker.errors.NotFound as exc:
+            raise FileNotFoundError(path) from exc
+
+        # get_archive returns a tar of the requested path, which is the only
+        # binary-safe way to read a file out: `cat` would force a decode.
+        with tarfile.open(fileobj=io.BytesIO(b"".join(stream))) as tar:
+            member = tar.next()
+            if member is None or not member.isfile():
+                raise FileNotFoundError(path)
+            extracted = tar.extractfile(member)
+            if extracted is None:
+                raise FileNotFoundError(path)
+            return extracted.read()
+
+    async def write_bytes(self, handle: SandboxHandle, path: str, content: bytes) -> None:
+        await asyncio.to_thread(self._write_bytes_sync, handle, path, content)
+
+    def _write_bytes_sync(self, handle: SandboxHandle, path: str, content: bytes) -> None:
+        container = self._client.containers.get(handle.id)
+        target = Path(_absolute(handle, path))
+        container.exec_run(["mkdir", "-p", str(target.parent)])
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w") as tar:
-            data = content.encode("utf-8")
             info = tarfile.TarInfo(name=target.name)
-            info.size = len(data)
-            tar.addfile(info, io.BytesIO(data))
-        container.put_archive(str(parent), buf.getvalue())
+            info.size = len(content)
+            tar.addfile(info, io.BytesIO(content))
+        container.put_archive(str(target.parent), buf.getvalue())
 
-    async def teardown(self, handle: SandboxHandle) -> None:
-        def _remove() -> None:
-            try:
-                self._client.containers.get(handle.id).remove(force=True)
-            except docker.errors.NotFound:
-                pass
-            finally:
-                self._has_timeout.pop(handle.id, None)
+    async def read_file(self, handle: SandboxHandle, path: str) -> str:
+        return (await self.read_bytes(handle, path)).decode("utf-8", errors="replace")
 
-        await asyncio.to_thread(_remove)
+    async def write_file(self, handle: SandboxHandle, path: str, content: str) -> None:
+        await self.write_bytes(handle, path, content.encode("utf-8"))
+
+
+def _absolute(handle: SandboxHandle, path: str) -> str:
+    target = Path(path)
+    return str(target if target.is_absolute() else Path(handle.workdir) / target)
 
 
 def _tar_directory(path: Path) -> bytes:

@@ -2,8 +2,6 @@
 in-memory fake and the provider is monkeypatched at its construction site.
 """
 
-from pathlib import Path
-
 from agentbench.models.provider import Message, ProviderResponse, ToolCall
 from agentbench.models.run import TokenUsage
 from agentbench.models.task import Task
@@ -25,10 +23,10 @@ class ScriptedExecutor:
         self.test_exit_code = test_exit_code
         self.files: dict[str, str] = {}
 
-    async def start(self, repo_path: Path, image: str) -> SandboxHandle:
+    async def start(self, repo, image, policy=None) -> SandboxHandle:
         return SandboxHandle(id="fake")
 
-    async def exec(self, handle, command, timeout_s) -> ExecResult:
+    async def exec(self, handle, command, timeout_s, on_output=None) -> ExecResult:
         joined = " ".join(command)
         if "--junitxml" in joined or "git add -A" in joined:
             return ExecResult(exit_code=0, stdout="", stderr="")
@@ -39,6 +37,12 @@ class ScriptedExecutor:
         if "git diff --cached" in joined:
             return ExecResult(exit_code=0, stdout="--- a/calc.py\n+++ b/calc.py\n", stderr="")
         return ExecResult(exit_code=self.test_exit_code, stdout="", stderr="")
+
+    async def read_bytes(self, handle, path) -> bytes:
+        return (await self.read_file(handle, path)).encode("utf-8")
+
+    async def write_bytes(self, handle, path, content) -> None:
+        self.files[path] = content.decode("utf-8")
 
     async def read_file(self, handle, path) -> str:
         if path.endswith("junit.xml"):
@@ -204,9 +208,9 @@ async def test_stale_junit_report_is_deleted_before_each_pass(tmp_path, monkeypa
     seen: list[str] = []
     original = executor.exec
 
-    async def spy(handle, command, timeout_s):
+    async def spy(handle, command, timeout_s, on_output=None):
         seen.append(" ".join(command))
-        return await original(handle, command, timeout_s)
+        return await original(handle, command, timeout_s, on_output)
 
     monkeypatch.setattr(executor, "exec", spy)
     await run_once(_task(tmp_path), 0, "fake-model", executor, provider=OneEditProvider())
@@ -285,3 +289,29 @@ async def test_run_once_records_repo_and_difficulty(tmp_path):
     result = await run_once(task, 0, "fake-model", ScriptedExecutor(), provider=OneEditProvider())
     assert result.repo_id == "repo_src"
     assert result.difficulty == "hard"
+
+
+async def test_run_once_records_phase_timings(tmp_path):
+    """Wall-clock alone cannot say whether sandbox work is worth optimizing."""
+    result = await run_once(
+        _task(tmp_path), 0, "fake-model", ScriptedExecutor(), provider=OneEditProvider()
+    )
+    assert result.error is None
+    for phase in (result.setup_s, result.agent_s, result.grading_s):
+        assert phase > 0.0
+    total = result.setup_s + result.agent_s + result.grading_s
+    assert total <= result.latency_s + 0.01  # phases are disjoint slices
+
+
+async def test_phases_after_a_failure_stay_zero(tmp_path, monkeypatch):
+    """A run that died in setup should not report agent or grading time."""
+
+    def explode(model, system=None):
+        raise RuntimeError("no api key")
+
+    monkeypatch.setattr("agentbench.orchestrator.runner.make_provider", explode)
+    result = await run_once(_task(tmp_path), 0, "fake-model", ScriptedExecutor())
+
+    assert result.error is not None
+    assert result.setup_s > 0.0  # setup completed
+    assert result.agent_s == 0.0 and result.grading_s == 0.0

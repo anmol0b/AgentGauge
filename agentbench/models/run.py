@@ -31,6 +31,12 @@ class RunResult(BaseModel):
     # reports no cost rather than a figure guessed from another model.
     cost_usd: float | None
     latency_s: float
+    # wall-clock split: sandbox setup + baseline / agent loop / grading.
+    # 0.0 on rows recorded before this was tracked, and on phases a
+    # run errored before reaching.
+    setup_s: float = 0.0
+    agent_s: float = 0.0
+    grading_s: float = 0.0
     tool_call_count: int
     diff: str
     # other tests the fix broke. None means detection was unavailable

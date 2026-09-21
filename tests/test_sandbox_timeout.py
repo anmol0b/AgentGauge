@@ -60,3 +60,14 @@ def test_host_deadline_is_looser_than_the_container_one():
 def test_kill_exit_codes_are_recognised():
     assert 124 in _TIMEOUT_EXIT_CODES  # timeout expired
     assert 137 in _TIMEOUT_EXIT_CODES  # SIGKILL
+
+
+def test_relative_paths_resolve_against_the_workdir():
+    from agentbench.sandbox.docker_executor import _absolute
+    from agentbench.sandbox.protocol import SandboxHandle
+
+    handle = SandboxHandle(id="c1", workdir="/repo")
+    assert _absolute(handle, "calc.py") == "/repo/calc.py"
+    assert _absolute(handle, "pkg/mod.py") == "/repo/pkg/mod.py"
+    # absolute paths are left alone: the junit report is written to /tmp
+    assert _absolute(handle, "/tmp/agentbench-junit.xml") == "/tmp/agentbench-junit.xml"
