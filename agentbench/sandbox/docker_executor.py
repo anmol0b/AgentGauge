@@ -10,9 +10,9 @@ import threading
 import time
 from pathlib import Path
 
-import docker
 import docker.errors
 
+import docker
 from agentbench.sandbox.executor import ExecResult, SandboxHandle
 from agentbench.sandbox.policy import SandboxPolicy
 

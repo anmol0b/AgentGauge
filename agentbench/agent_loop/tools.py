@@ -51,7 +51,10 @@ TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         name="run_tests",
-        description="Run a shell command in the sandbox (e.g. pytest). Returns exit code and output.",
+        description=(
+            "Run a shell command in the sandbox (e.g. pytest). "
+            "Returns exit code and output."
+        ),
         parameters={
             "type": "object",
             "properties": {

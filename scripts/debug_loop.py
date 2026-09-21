@@ -13,8 +13,9 @@ from agentbench.agent_loop.loop import DEFAULT_SYSTEM_PROMPT, run_agent_loop
 from agentbench.providers import make_provider
 from agentbench.sandbox.executor import ExecResult, SandboxHandle
 
-CALC = (Path(__file__).parent.parent / "agentbench/tasks/fixtures/calc_repo/calc.py").read_text()
-TEST = (Path(__file__).parent.parent / "agentbench/tasks/fixtures/calc_repo/test_calc.py").read_text()
+FIXTURES = Path(__file__).parent.parent / "agentbench/tasks/fixtures/calc_repo"
+CALC = (FIXTURES / "calc.py").read_text()
+TEST = (FIXTURES / "test_calc.py").read_text()
 
 
 class PrintingExecutor:

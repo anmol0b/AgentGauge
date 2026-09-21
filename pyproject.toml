@@ -3,6 +3,7 @@ name = "agentbench"
 version = "0.1.0"
 description = "AI-friendliness benchmark: run coding agents against real repo tasks in Docker sandboxes"
 requires-python = ">=3.12"
+license = "MIT"
 dependencies = [
     "pydantic>=2.6",
     "docker>=7.0",
@@ -13,7 +14,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6"]
+
+[project.scripts]
+agentbench = "agentbench.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -22,6 +26,21 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["agentbench*"]
 
+[tool.setuptools.package-data]
+agentbench = ["providers/pricing.yaml", "tasks/*.yaml"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = ["docker: tests requiring a running Docker daemon"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+
+[tool.ruff.lint.per-file-ignores]
+# tests import fixtures after defining helpers they depend on, and build
+# kwargs dicts with dict(...) on purpose so they read as call signatures
+"tests/*" = ["E402", "C408"]

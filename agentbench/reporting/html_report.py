@@ -93,7 +93,8 @@ parentheses.</p>
     <td><strong>{{ m.model }}</strong></td>
     <td>{{ rate(m.pass_rate, m.pass_rate_ci) }}</td>
     <td>{{ m.n_valid }} / {{ m.n_runs }}</td>
-    <td class="{{ 'warn' if m.error_rate else '' }}">{{ "%.0f%%" | format(m.error_rate * 100) }}</td>
+    <td class="{{ 'warn' if m.error_rate else '' }}">{{
+      "%.0f%%" | format(m.error_rate * 100) }}</td>
     <td class="{{ 'warn' if m.tampered_count else '' }}">{{ m.tampered_count or "—" }}</td>
     <td class="{{ 'warn' if m.regressed_count else '' }}">{{ m.regressed_count or "—" }}</td>
     {% if m.total_cost is none %}
@@ -133,7 +134,8 @@ parentheses.</p>
     <td>{{ v.task_id }}</td><td>{{ v.model }}</td>
     <td>{{ rate(v.pass_rate, v.pass_rate_ci) }}</td>
     <td>{{ v.n_valid }} / {{ v.n_runs }}</td>
-    <td class="{{ 'warn' if v.error_rate else '' }}">{{ "%.0f%%" | format(v.error_rate * 100) }}</td>
+    <td class="{{ 'warn' if v.error_rate else '' }}">{{
+      "%.0f%%" | format(v.error_rate * 100) }}</td>
     <td class="{{ 'warn' if v.tampered_count else '' }}">{{ v.tampered_count or "—" }}</td>
     <td class="{{ 'warn' if v.regressed_count else '' }}">{{ v.regressed_count or "—" }}</td>
     {% if v.cost_mean is none %}
