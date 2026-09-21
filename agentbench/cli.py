@@ -7,6 +7,7 @@ Usage:
 
 import argparse
 import asyncio
+import uuid
 from pathlib import Path
 
 import yaml
@@ -37,6 +38,11 @@ def parse_args() -> argparse.Namespace:
                         help="Sandbox image (must contain test deps; no network in sandbox)")
     parser.add_argument("--db", default="agentbench.db", help="SQLite run history path")
     parser.add_argument("--out", default="report.html", help="HTML report output path")
+    parser.add_argument(
+        "--all-history", action="store_true",
+        help="Report over every run ever recorded in --db, not just this invocation. "
+             "Mixes separate benchmark sessions into one pass rate — off by default.",
+    )
     return parser.parse_args()
 
 
@@ -47,6 +53,7 @@ async def amain() -> None:
         for task in taskset.tasks:
             task.repo_url = args.repo
     executor = DockerSandboxExecutor()
+    run_set_id = uuid.uuid4().hex[:12]
 
     results = await run_benchmark(
         tasks=taskset.tasks,
@@ -59,16 +66,36 @@ async def amain() -> None:
 
     store = RunStore(args.db)
     try:
-        store.insert_many(results)
-        report = aggregate(store.all_runs())
+        store.insert_many(results, run_set_id)
+        scope = store.all_runs() if args.all_history else store.runs_for_set(run_set_id)
+        report = aggregate(scope)
     finally:
         store.close()
 
-    out = render_html(report, args.out)
-    print(f"\nwrote {out} ({len(results)} runs recorded in {args.db})")
-    for v in report.variance:
-        print(f"  {v.task_id} | {v.model}: pass rate {v.pass_rate:.0%}, "
-              f"cost ${v.cost_mean:.4f}±{v.cost_stddev:.4f}")
+    out = render_html(report, args.out, concurrency=args.concurrency)
+    print(f"\nwrote {out} ({len(results)} runs recorded in {args.db}, set {run_set_id})\n")
+
+    for m in report.models:
+        if m.pass_rate is None:
+            rate = "n/a (every run errored)"
+        else:
+            ci = m.pass_rate_ci
+            rate = f"{m.pass_rate:.0%} (95% CI {ci.low:.0%}-{ci.high:.0%})"
+        cost = "unpriced" if m.total_cost is None else f"${m.total_cost:.4f}"
+        print(f"  {m.model}: {rate} over {m.n_valid} valid runs, total {cost}")
+        notes = []
+        if m.error_rate:
+            notes.append(f"{m.error_rate:.0%} harness errors")
+        if m.tampered_count:
+            notes.append(f"{m.tampered_count} disqualified (edited tests)")
+        if m.regressed_count:
+            notes.append(f"{m.regressed_count} caused regressions")
+        if notes:
+            print(f"      {', '.join(notes)}")
+
+    if len(report.models) > 1:
+        print("\n  Overlapping confidence intervals mean this run does not "
+              "separate the models.")
 
 
 def main() -> None:

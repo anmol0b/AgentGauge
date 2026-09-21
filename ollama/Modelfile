@@ -1,4 +1,9 @@
-FROM qwen2.5:7b
-# Ollama defaults to a 4096-token context, too small for an agent loop
-# (tool outputs + history). Bake in a larger window.
+# Ollama defaults to a 4096-token context, which is too small for an agent
+# loop (system prompt + tool outputs + history) and shows up as the model
+# silently losing the start of the conversation.
+#
+# Set FROM to whatever you actually pulled, then:
+#   ollama create agentbench-<name> -f ollama/Modelfile
+# and benchmark it as --model ollama/agentbench-<name>.
+FROM qwen2.5-coder:14b
 PARAMETER num_ctx 16384

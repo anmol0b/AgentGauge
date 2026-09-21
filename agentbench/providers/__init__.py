@@ -7,6 +7,7 @@ import os
 from agentbench.providers.anthropic_provider import AnthropicProvider
 from agentbench.providers.base import ModelProvider
 from agentbench.providers.openai_provider import OpenAIProvider
+from agentbench.providers.pricing import lookup
 
 
 def make_provider(model: str, system: str | None = None) -> ModelProvider:
@@ -19,7 +20,7 @@ def make_provider(model: str, system: str | None = None) -> ModelProvider:
             api_key="ollama",
             system=system,
             base_url="http://localhost:11434/v1",
-            price=(0.0, 0.0),
+            price=lookup("ollama/"),  # local models are free, and recorded as such
         )
     if model.startswith(("gpt", "o1", "o3", "o4")):
         return OpenAIProvider(model, api_key=_require_env("OPENAI_API_KEY"), system=system)

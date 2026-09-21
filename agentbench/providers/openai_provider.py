@@ -12,14 +12,7 @@ from agentbench.models.provider import (
     ToolSpec,
 )
 from agentbench.models.run import TokenUsage
-
-# USD per 1M tokens: (input, output)
-_PRICING: dict[str, tuple[float, float]] = {
-    "gpt-4.1": (2.0, 8.0),
-    "gpt-4o": (2.5, 10.0),
-    "gpt-4o-mini": (0.15, 0.60),
-}
-_DEFAULT_PRICE = (2.5, 10.0)
+from agentbench.providers.pricing import Price, lookup
 
 _STOP_MAP = {
     "stop": "end_turn",
@@ -36,10 +29,10 @@ class OpenAIProvider:
         system: str | None = None,
         max_tokens: int = 8096,
         base_url: str | None = None,
-        price: tuple[float, float] | None = None,
+        price: Price | None = None,
     ) -> None:
         """`base_url` enables OpenAI-compatible endpoints (Ollama, Groq, ...).
-        `price` overrides the pricing table (e.g. (0, 0) for local models)."""
+        `price` overrides the pricing table (local models are free)."""
         self._model = model
         self._system = system
         self._max_tokens = max_tokens
@@ -93,6 +86,8 @@ class OpenAIProvider:
         assistant = Message(role="assistant", content=content, tool_calls=tool_calls)
         usage = TokenUsage()
         if response.usage:
+            # prompt_tokens already includes any cached tokens, so they are
+            # not broken out here — doing so would double-count them.
             usage = TokenUsage(
                 tokens_in=response.usage.prompt_tokens,
                 tokens_out=response.usage.completion_tokens,
@@ -104,16 +99,10 @@ class OpenAIProvider:
             stop_reason=_STOP_MAP.get(finish_reason, "error"),
         )
 
-    def compute_cost(self, usage: TokenUsage) -> float:
-        if self._price is not None:
-            price_in, price_out = self._price
-        else:
-            price_in, price_out = next(
-                (p for prefix, p in sorted(_PRICING.items(), key=lambda kv: -len(kv[0]))
-                 if self._model.startswith(prefix)),
-                _DEFAULT_PRICE,
-            )
-        return (usage.tokens_in * price_in + usage.tokens_out * price_out) / 1_000_000
+    def compute_cost(self, usage: TokenUsage) -> float | None:
+        """None when this model has no price on file — never a guess."""
+        price = self._price or lookup(self._model)
+        return price.cost(usage) if price else None
 
 
 def _to_openai_messages(messages: list[Message]) -> list[dict]:

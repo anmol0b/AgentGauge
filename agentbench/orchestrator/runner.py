@@ -11,6 +11,7 @@ from agentbench.agent_loop.loop import DEFAULT_SYSTEM_PROMPT, run_agent_loop
 from agentbench.models.run import RunResult
 from agentbench.models.task import Task
 from agentbench.providers import make_provider
+from agentbench.providers.base import ModelProvider
 from agentbench.sandbox.executor import SandboxExecutor
 
 DEFAULT_IMAGE = "python:3.12-slim"
@@ -25,19 +26,29 @@ async def run_once(
     executor: SandboxExecutor,
     image: str = DEFAULT_IMAGE,
     max_turns: int = 25,
+    provider: ModelProvider | None = None,
 ) -> RunResult:
+    """Run `task` once against `model` and return the measured result.
+
+    `provider` is injectable so callers can share one client across runs (and
+    so this function is testable without API keys). When omitted it is built
+    from `model`, inside the try block, so a missing key is reported as a run
+    error rather than crashing the harness.
+    """
     started = time.monotonic()
     tokens_in = tokens_out = tool_call_count = 0
-    cost = 0.0
+    cost: float | None = 0.0
     diff = ""
     error: str | None = None
+    stop_reason: str | None = None
     passed = False
-    regressions: list[str] = []
+    regressions: list[str] | None = None
+    tampered: list[str] | None = None
     handle = None
 
     with tempfile.TemporaryDirectory(prefix=f"agentbench-{task.id}-") as tmp:
         try:
-            repo_path = _materialize_repo(task.repo_url, Path(tmp))
+            repo_path = _materialize_repo(task.repo_url, Path(tmp), task.repo_ref)
             handle = await executor.start(repo_path, image)
             for command in task.setup_commands:
                 result = await executor.exec(handle, ["sh", "-c", command], SETUP_TIMEOUT_S)
@@ -46,9 +57,9 @@ async def run_once(
 
             baseline = await _failing_tests(executor, handle, task)
 
-            provider = make_provider(model, system=DEFAULT_SYSTEM_PROMPT)
+            run_provider = provider or make_provider(model, system=DEFAULT_SYSTEM_PROMPT)
             loop_result = await run_agent_loop(
-                provider,
+                run_provider,
                 executor,
                 handle,
                 instruction=await _instruction(executor, handle, task),
@@ -58,6 +69,7 @@ async def run_once(
             tokens_out = loop_result.usage.tokens_out
             cost = loop_result.cost_usd
             tool_call_count = loop_result.tool_call_count
+            stop_reason = loop_result.stop_reason
 
             check = await executor.exec(
                 handle, ["sh", "-c", task.failing_test_command], TEST_TIMEOUT_S
@@ -65,12 +77,27 @@ async def run_once(
             passed = check.exit_code == 0
 
             after = await _failing_tests(executor, handle, task)
-            regressions = sorted(after - baseline)
+            if baseline is not None and after is not None:
+                regressions = sorted(after - baseline)
+
+            await executor.exec(
+                handle, ["sh", "-c", "git add -A >/dev/null 2>&1; true"], timeout_s=30
+            )
+            changed = await executor.exec(
+                handle, ["sh", "-c", "git diff --cached --name-only"], timeout_s=30
+            )
+            tampered = sorted(
+                path for path in changed.stdout.split("\n")
+                if path.strip() and _is_test_path(path.strip())
+            )
+            if tampered:
+                # The agent was told not to touch tests. Editing the test it was
+                # asked to satisfy turns the exit-code grade into a rubber stamp,
+                # so a tampered run never counts as a pass.
+                passed = False
 
             diff_result = await executor.exec(
-                handle,
-                ["sh", "-c", "git add -A >/dev/null 2>&1; git diff --cached"],
-                timeout_s=30,
+                handle, ["sh", "-c", "git diff --cached"], timeout_s=30
             )
             diff = diff_result.stdout
         except Exception as exc:
@@ -81,6 +108,8 @@ async def run_once(
 
     return RunResult(
         task_id=task.id,
+        repo_id=task.repo_id,
+        difficulty=task.difficulty,
         run_index=run_index,
         model=model,
         passed=passed,
@@ -92,39 +121,74 @@ async def run_once(
         diff=diff,
         regressions=regressions,
         error=error,
+        stop_reason=stop_reason,
+        tampered_tests=tampered,
     )
 
 
-def _materialize_repo(repo_url: str, tmp: Path) -> Path:
-    """Clone a git URL or copy a local path into `tmp`."""
+def _is_test_path(path: str) -> bool:
+    """Whether `path` looks like test code the agent was supposed to leave alone."""
+    parts = Path(path).parts
+    name = Path(path).name
+    return (
+        name == "conftest.py"
+        or name.startswith("test_")
+        or name.endswith(("_test.py", "_test.js", "_test.go", ".test.ts", ".test.js"))
+        or any(part in ("test", "tests", "__tests__", "spec") for part in parts[:-1])
+    )
+
+
+def _materialize_repo(repo_url: str, tmp: Path, repo_ref: str | None = None) -> Path:
+    """Clone a git URL or copy a local path into `tmp`.
+
+    `repo_ref` pins the checkout. Leaving it unset on a real repository makes
+    the task irreproducible as soon as the default branch moves.
+    """
+    dest = tmp / "repo"
     source = Path(repo_url).expanduser()
     if source.is_dir():
-        dest = tmp / "repo"
         shutil.copytree(source, dest)
         if not (dest / ".git").exists():
             _git(dest, "init", "-q")
             _git(dest, "add", "-A")
             _git(dest, "-c", "user.email=bench@local", "-c", "user.name=bench",
                  "commit", "-qm", "baseline")
-        return dest
-    subprocess.run(["git", "clone", "-q", repo_url, str(tmp / "repo")], check=True)
-    return tmp / "repo"
+    else:
+        subprocess.run(["git", "clone", "-q", repo_url, str(dest)], check=True)
+    if repo_ref:
+        _git(dest, "checkout", "-q", repo_ref)
+    return dest
 
 
 def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, check=True)
 
 
-async def _failing_tests(executor: SandboxExecutor, handle, task: Task) -> set[str]:
-    """Node ids of failing tests, via junitxml (assumes pytest-compatible runner)."""
-    command = f"{task.full_test_command} --junitxml=/tmp/agentbench-junit.xml >/dev/null 2>&1; true"
+async def _failing_tests(
+    executor: SandboxExecutor, handle, task: Task
+) -> set[str] | None:
+    """Node ids of currently failing tests, via junitxml.
+
+    Returns None when the report could not be produced or parsed — the runner
+    must not read that as "nothing is failing". `--junitxml` is a pytest flag,
+    so a non-pytest suite lands here and regressions are reported as undetected
+    rather than silently empty.
+    """
+    report = "/tmp/agentbench-junit.xml"
+    # Delete first: a stale report from the baseline pass would otherwise be
+    # read back as the post-fix result if this run fails to write one.
+    await executor.exec(handle, ["sh", "-c", f"rm -f {report}"], timeout_s=30)
+    command = f"{task.full_test_command} --junitxml={report} >/dev/null 2>&1; true"
     await executor.exec(handle, ["sh", "-c", command], TEST_TIMEOUT_S)
     try:
-        xml_text = await executor.read_file(handle, "/tmp/agentbench-junit.xml")
+        xml_text = await executor.read_file(handle, report)
     except FileNotFoundError:
-        return set()
+        return None
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
     failing: set[str] = set()
-    root = ET.fromstring(xml_text)
     for testcase in root.iter("testcase"):
         node_id = f"{testcase.get('classname', '')}::{testcase.get('name', '')}"
         if any(child.tag in ("failure", "error") for child in testcase):
@@ -142,5 +206,6 @@ async def _instruction(executor: SandboxExecutor, handle, task: Task) -> str:
         f"Run the failing test, read the relevant source file with read_file, "
         f"find the root cause, and apply the fix with the edit or write_file tool. "
         f"Then re-run the failing test to verify it passes. "
+        f"Do not modify test files — a run that edits tests is disqualified. "
         f"Do not break any other tests (full suite: `{task.full_test_command}`)."
     )

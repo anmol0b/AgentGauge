@@ -26,7 +26,14 @@ async def test_docker_executor_round_trip(tmp_path):
         await executor.write_file(handle, "new.txt", "hello\n")
         assert await executor.read_file(handle, "new.txt") == "hello\n"
 
-        timed = await executor.exec(handle, ["sleep", "5"], timeout_s=1)
+        timed = await executor.exec(handle, ["sleep", "30"], timeout_s=1)
         assert timed.timed_out
+
+        # the process must actually be dead, not merely abandoned: the
+        # container should be responsive and running no stray sleep
+        still_alive = await executor.exec(handle, ["sh", "-c", "echo alive"], timeout_s=10)
+        assert still_alive.stdout.strip() == "alive"
+        procs = await executor.exec(handle, ["sh", "-c", "ps -eo args || true"], timeout_s=10)
+        assert "sleep 30" not in procs.stdout
     finally:
         await executor.teardown(handle)
