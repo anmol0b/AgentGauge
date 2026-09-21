@@ -91,17 +91,11 @@ def _task(tmp_path) -> Task:
     )
 
 
-def _patch_provider(monkeypatch, provider):
-    monkeypatch.setattr(
-        "agentbench.orchestrator.runner.make_provider",
-        lambda model, system=None: provider,
-    )
-
-
-async def test_run_once_records_stop_reason(tmp_path, monkeypatch):
-    _patch_provider(monkeypatch, OneEditProvider())
+async def test_run_once_records_stop_reason(tmp_path):
     executor = ScriptedExecutor()
-    result = await run_once(_task(tmp_path), 0, "fake-model", executor)
+    result = await run_once(
+        _task(tmp_path), 0, "fake-model", executor, provider=OneEditProvider()
+    )
 
     assert result.error is None
     assert result.passed is True
@@ -111,26 +105,29 @@ async def test_run_once_records_stop_reason(tmp_path, monkeypatch):
     assert executor.torn_down is True
 
 
-async def test_run_once_flags_max_turns(tmp_path, monkeypatch):
+async def test_run_once_flags_max_turns(tmp_path):
     """A failure needs a reason: out of turns is not the same as a wrong fix."""
-    _patch_provider(monkeypatch, OneEditProvider())
     result = await run_once(
-        _task(tmp_path), 0, "fake-model", ScriptedExecutor(), max_turns=1
+        _task(tmp_path), 0, "fake-model", ScriptedExecutor(), max_turns=1,
+        provider=OneEditProvider(),
     )
     assert result.stop_reason == "max_turns"
 
 
-async def test_editing_tests_disqualifies_a_passing_run(tmp_path, monkeypatch):
+async def test_editing_tests_disqualifies_a_passing_run(tmp_path):
     """Exit code 0 is not a pass if the agent rewrote the test to get it."""
-    _patch_provider(monkeypatch, OneEditProvider())
     executor = ScriptedExecutor(changed_files="calc.py\ntest_calc.py\n", test_exit_code=0)
-    result = await run_once(_task(tmp_path), 0, "fake-model", executor)
+    result = await run_once(
+        _task(tmp_path), 0, "fake-model", executor, provider=OneEditProvider()
+    )
 
     assert result.tampered_tests == ["test_calc.py"]
     assert result.passed is False
 
 
 async def test_run_once_reports_harness_errors(tmp_path, monkeypatch):
+    """With no provider injected, a construction failure is a run error."""
+
     def explode(model, system=None):
         raise RuntimeError("no api key")
 

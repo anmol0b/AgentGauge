@@ -45,6 +45,9 @@ from the host), so test dependencies must be baked into the image.
 
 - Anthropic: `export ANTHROPIC_API_KEY=...`, use `--model claude-sonnet-4-5`
 - OpenAI: `export OPENAI_API_KEY=...`, use `--model gpt-4o`
+One provider is built per model and shared across that model's runs, so a
+missing API key fails immediately rather than after every run has errored.
+
 - Ollama (free, local, no key): `ollama pull qwen2.5-coder:14b`, then
   `--model ollama/qwen2.5-coder:14b`. Note: Ollama defaults to a 4096-token context;
   bake in a larger window (`ollama create <name> -f ollama/Modelfile`).

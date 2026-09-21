@@ -11,6 +11,7 @@ from agentbench.agent_loop.loop import DEFAULT_SYSTEM_PROMPT, run_agent_loop
 from agentbench.models.run import RunResult
 from agentbench.models.task import Task
 from agentbench.providers import make_provider
+from agentbench.providers.base import ModelProvider
 from agentbench.sandbox.executor import SandboxExecutor
 
 DEFAULT_IMAGE = "python:3.12-slim"
@@ -25,7 +26,15 @@ async def run_once(
     executor: SandboxExecutor,
     image: str = DEFAULT_IMAGE,
     max_turns: int = 25,
+    provider: ModelProvider | None = None,
 ) -> RunResult:
+    """Run `task` once against `model` and return the measured result.
+
+    `provider` is injectable so callers can share one client across runs (and
+    so this function is testable without API keys). When omitted it is built
+    from `model`, inside the try block, so a missing key is reported as a run
+    error rather than crashing the harness.
+    """
     started = time.monotonic()
     tokens_in = tokens_out = tool_call_count = 0
     cost = 0.0
@@ -48,9 +57,9 @@ async def run_once(
 
             baseline = await _failing_tests(executor, handle, task)
 
-            provider = make_provider(model, system=DEFAULT_SYSTEM_PROMPT)
+            run_provider = provider or make_provider(model, system=DEFAULT_SYSTEM_PROMPT)
             loop_result = await run_agent_loop(
-                provider,
+                run_provider,
                 executor,
                 handle,
                 instruction=await _instruction(executor, handle, task),
