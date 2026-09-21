@@ -48,7 +48,7 @@ async def run_once(
 
     with tempfile.TemporaryDirectory(prefix=f"agentbench-{task.id}-") as tmp:
         try:
-            repo_path = _materialize_repo(task.repo_url, Path(tmp))
+            repo_path = _materialize_repo(task.repo_url, Path(tmp), task.repo_ref)
             handle = await executor.start(repo_path, image)
             for command in task.setup_commands:
                 result = await executor.exec(handle, ["sh", "-c", command], SETUP_TIMEOUT_S)
@@ -108,6 +108,8 @@ async def run_once(
 
     return RunResult(
         task_id=task.id,
+        repo_id=task.repo_id,
+        difficulty=task.difficulty,
         run_index=run_index,
         model=model,
         passed=passed,
@@ -136,20 +138,26 @@ def _is_test_path(path: str) -> bool:
     )
 
 
-def _materialize_repo(repo_url: str, tmp: Path) -> Path:
-    """Clone a git URL or copy a local path into `tmp`."""
+def _materialize_repo(repo_url: str, tmp: Path, repo_ref: str | None = None) -> Path:
+    """Clone a git URL or copy a local path into `tmp`.
+
+    `repo_ref` pins the checkout. Leaving it unset on a real repository makes
+    the task irreproducible as soon as the default branch moves.
+    """
+    dest = tmp / "repo"
     source = Path(repo_url).expanduser()
     if source.is_dir():
-        dest = tmp / "repo"
         shutil.copytree(source, dest)
         if not (dest / ".git").exists():
             _git(dest, "init", "-q")
             _git(dest, "add", "-A")
             _git(dest, "-c", "user.email=bench@local", "-c", "user.name=bench",
                  "commit", "-qm", "baseline")
-        return dest
-    subprocess.run(["git", "clone", "-q", repo_url, str(tmp / "repo")], check=True)
-    return tmp / "repo"
+    else:
+        subprocess.run(["git", "clone", "-q", repo_url, str(dest)], check=True)
+    if repo_ref:
+        _git(dest, "checkout", "-q", repo_ref)
+    return dest
 
 
 def _git(cwd: Path, *args: str) -> None:

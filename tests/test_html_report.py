@@ -39,7 +39,7 @@ def test_report_renders_na_when_every_run_errored(tmp_path):
     html = render_html(report, tmp_path / "r.html").read_text()
     # never present a harness outage as a 0% score
     assert report.variance[0].pass_rate is None
-    assert '<td class="muted">n/a</td>' in html
+    assert '<span class="muted">n/a</span>' in html
     assert "100%" in html  # shown as a 100% error rate instead
 
 
@@ -53,3 +53,27 @@ def test_unchecked_runs_are_labelled_not_checked(tmp_path):
     cell = '<td class="muted">not checked</td>'
     assert cell not in clean
     assert cell in unchecked
+
+
+def test_report_shows_a_model_leaderboard_with_intervals(tmp_path):
+    runs = [_run(model="m1", run_index=i, passed=i < 2) for i in range(3)]
+    runs += [_run(model="m2", run_index=i, passed=False) for i in range(3)]
+    html = render_html(aggregate(runs), tmp_path / "r.html").read_text()
+    assert "<h2>Models</h2>" in html
+    assert "95% CI" in html
+    assert "m1" in html and "m2" in html
+
+
+def test_report_breaks_down_by_difficulty(tmp_path):
+    runs = [
+        _run(run_index=0, difficulty="easy", passed=True),
+        _run(run_index=1, difficulty="hard", passed=False),
+    ]
+    html = render_html(aggregate(runs), tmp_path / "r.html").read_text()
+    assert "By difficulty" in html
+    assert "hard" in html
+
+
+def test_difficulty_section_omitted_when_unknown(tmp_path):
+    html = render_html(aggregate([_run()]), tmp_path / "r.html").read_text()
+    assert "By difficulty" not in html

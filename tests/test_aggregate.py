@@ -81,3 +81,50 @@ def test_tampered_runs_are_counted():
     v = aggregate(runs).variance[0]
     assert v.tampered_count == 1
     assert v.pass_rate == 0.5  # disqualified run counts against the model
+
+
+def test_pass_rate_carries_a_confidence_interval():
+    """3/3 is not 100% +/- 0 — the interval has to say what N supports."""
+    v = aggregate([_run(run_index=i) for i in range(3)]).variance[0]
+    assert v.pass_rate == 1.0
+    assert v.pass_rate_ci.high == 1.0
+    assert v.pass_rate_ci.low < 0.5  # three runs support very little
+
+
+def test_interval_narrows_with_more_runs():
+    few = aggregate([_run(run_index=i) for i in range(3)]).variance[0]
+    many = aggregate([_run(run_index=i) for i in range(50)]).variance[0]
+    assert many.pass_rate_ci.low > few.pass_rate_ci.low
+
+
+def test_model_summary_totals_cost_across_tasks():
+    runs = [
+        _run(task_id="t1", cost=0.01), _run(task_id="t2", cost=0.02),
+    ]
+    summary = aggregate(runs).models[0]
+    assert summary.total_cost == pytest.approx(0.03)
+    assert summary.n_valid == 2
+
+
+def test_model_cost_total_withheld_when_any_run_is_unpriced():
+    """A partial total would read as the cost of the whole set."""
+    runs = [_run(task_id="t1", cost=0.01), _run(task_id="t2")]
+    runs[1].cost_usd = None
+    summary = aggregate(runs).models[0]
+    assert summary.total_cost is None
+    assert summary.n_unpriced == 1
+
+
+def test_difficulty_breakdown_orders_easy_to_hard():
+    runs = [
+        _run(run_index=0, task_id="h"), _run(run_index=1, task_id="e"),
+    ]
+    runs[0].difficulty, runs[1].difficulty = "hard", "easy"
+    order = [d.difficulty for d in aggregate(runs).by_difficulty]
+    assert order == ["easy", "hard"]
+
+
+def test_regressions_are_counted_per_model():
+    runs = [_run(run_index=0), _run(run_index=1)]
+    runs[1].regressions = ["pkg::test_other"]
+    assert aggregate(runs).models[0].regressed_count == 1

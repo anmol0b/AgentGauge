@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS runs (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     run_set_id TEXT NOT NULL DEFAULT '',
     task_id TEXT NOT NULL,
+    repo_id TEXT,
+    difficulty TEXT,
     run_index INTEGER NOT NULL,
     model TEXT NOT NULL,
     passed INTEGER NOT NULL,
@@ -35,12 +37,14 @@ _MIGRATIONS = {
     "run_set_id": "TEXT NOT NULL DEFAULT ''",
     "stop_reason": "TEXT",
     "tampered_tests": "TEXT",
+    "repo_id": "TEXT",
+    "difficulty": "TEXT",
 }
 
 _COLUMNS = (
     "task_id, run_index, model, passed, tokens_in, tokens_out, cost_usd, "
     "latency_s, tool_call_count, diff, regressions, error, stop_reason, "
-    "tampered_tests, run_set_id"
+    "tampered_tests, run_set_id, repo_id, difficulty"
 )
 
 
@@ -84,14 +88,14 @@ class RunStore:
     def insert(self, result: RunResult, run_set_id: str = "") -> None:
         self._conn.execute(
             f"INSERT INTO runs ({_COLUMNS}) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 result.task_id, result.run_index, result.model, int(result.passed),
                 result.tokens_in, result.tokens_out, result.cost_usd,
                 result.latency_s, result.tool_call_count, result.diff,
                 _dump_or_null(result.regressions), result.error, result.stop_reason,
                 _dump_or_null(result.tampered_tests),
-                run_set_id or result.run_set_id,
+                run_set_id or result.run_set_id, result.repo_id, result.difficulty,
             ),
         )
         self._conn.commit()
@@ -123,7 +127,7 @@ class RunStore:
                 regressions=json.loads(r[10]) if r[10] is not None else None,
                 error=r[11], stop_reason=r[12],
                 tampered_tests=json.loads(r[13]) if r[13] is not None else None,
-                run_set_id=r[14] or "",
+                run_set_id=r[14] or "", repo_id=r[15], difficulty=r[16],
             )
             for r in rows
         ]

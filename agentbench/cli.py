@@ -73,18 +73,29 @@ async def amain() -> None:
         store.close()
 
     out = render_html(report, args.out, concurrency=args.concurrency)
-    print(f"\nwrote {out} ({len(results)} runs recorded in {args.db}, set {run_set_id})")
-    for v in report.variance:
-        rate = "n/a (all runs errored)" if v.pass_rate is None else f"{v.pass_rate:.0%}"
-        cost = ("unpriced" if v.cost_mean is None
-                else f"${v.cost_mean:.4f}±{v.cost_stddev:.4f}")
-        line = (f"  {v.task_id} | {v.model}: pass rate {rate} of {v.n_valid} valid runs, "
-                f"cost {cost}")
-        if v.error_rate:
-            line += f", {v.error_rate:.0%} harness errors"
-        if v.tampered_count:
-            line += f", {v.tampered_count} disqualified (edited tests)"
-        print(line)
+    print(f"\nwrote {out} ({len(results)} runs recorded in {args.db}, set {run_set_id})\n")
+
+    for m in report.models:
+        if m.pass_rate is None:
+            rate = "n/a (every run errored)"
+        else:
+            ci = m.pass_rate_ci
+            rate = f"{m.pass_rate:.0%} (95% CI {ci.low:.0%}-{ci.high:.0%})"
+        cost = "unpriced" if m.total_cost is None else f"${m.total_cost:.4f}"
+        print(f"  {m.model}: {rate} over {m.n_valid} valid runs, total {cost}")
+        notes = []
+        if m.error_rate:
+            notes.append(f"{m.error_rate:.0%} harness errors")
+        if m.tampered_count:
+            notes.append(f"{m.tampered_count} disqualified (edited tests)")
+        if m.regressed_count:
+            notes.append(f"{m.regressed_count} caused regressions")
+        if notes:
+            print(f"      {', '.join(notes)}")
+
+    if len(report.models) > 1:
+        print("\n  Overlapping confidence intervals mean this run does not "
+              "separate the models.")
 
 
 def main() -> None:

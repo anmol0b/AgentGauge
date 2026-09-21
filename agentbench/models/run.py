@@ -18,6 +18,10 @@ class TokenUsage(BaseModel):
 
 class RunResult(BaseModel):
     task_id: str
+    # denormalized from Task so the database is self-describing:
+    # reports are built from stored runs, not from the task YAML
+    repo_id: str | None = None
+    difficulty: str | None = None
     run_index: int  # which of N repeats
     model: str
     passed: bool

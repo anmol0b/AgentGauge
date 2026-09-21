@@ -207,3 +207,71 @@ async def test_stale_junit_report_is_deleted_before_each_pass(tmp_path):
 
     removals = [c for c in seen if "rm -f" in c and "junit" in c]
     assert len(removals) == 2  # once before the baseline pass, once before the after pass
+
+
+# --- repo materialization -------------------------------------------------
+# The clone branch had never executed: every task so far used a local path.
+# These use a local git repo, so they need no network.
+
+import subprocess  # noqa: E402
+
+from agentbench.orchestrator.runner import _materialize_repo  # noqa: E402
+
+
+def _git(cwd, *args):
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+                   cwd=cwd, check=True, capture_output=True)
+
+
+def _origin_repo(tmp_path):
+    """A real git repo with two commits, to clone from."""
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    _git(origin, "init", "-q", "-b", "main")
+    (origin / "calc.py").write_text("buggy\n")
+    _git(origin, "add", "-A")
+    _git(origin, "commit", "-qm", "buggy")
+    buggy = subprocess.run(["git", "rev-parse", "HEAD"], cwd=origin,
+                           capture_output=True, text=True).stdout.strip()
+    (origin / "calc.py").write_text("fixed\n")
+    _git(origin, "add", "-A")
+    _git(origin, "commit", "-qm", "fixed")
+    return origin, buggy
+
+
+def test_materialize_clones_a_git_url(tmp_path):
+    origin, _ = _origin_repo(tmp_path)
+    dest = tmp_path / "work"
+    dest.mkdir()
+    repo = _materialize_repo(str(origin), dest)
+    assert (repo / "calc.py").read_text() == "fixed\n"  # default branch tip
+    assert (repo / ".git").exists()
+
+
+def test_materialize_pins_the_requested_ref(tmp_path):
+    """Unpinned real repos are irreproducible once the branch moves."""
+    origin, buggy = _origin_repo(tmp_path)
+    dest = tmp_path / "work"
+    dest.mkdir()
+    repo = _materialize_repo(str(origin), dest, repo_ref=buggy)
+    assert (repo / "calc.py").read_text() == "buggy\n"
+
+
+def test_materialize_copies_and_inits_a_local_path(tmp_path):
+    source = tmp_path / "plain"
+    source.mkdir()
+    (source / "a.py").write_text("x\n")
+    dest = tmp_path / "work"
+    dest.mkdir()
+    repo = _materialize_repo(str(source), dest)
+    assert (repo / ".git").exists()  # baseline commit created for diffing
+    assert (repo / "a.py").read_text() == "x\n"
+
+
+async def test_run_once_records_repo_and_difficulty(tmp_path):
+    task = _task(tmp_path)
+    task.difficulty = "hard"
+    result = await run_once(task, 0, "fake-model", ScriptedExecutor(),
+                            provider=OneEditProvider())
+    assert result.repo_id == "repo_src"
+    assert result.difficulty == "hard"
