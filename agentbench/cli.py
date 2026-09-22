@@ -14,7 +14,7 @@ import yaml
 
 from agentbench.models.task import TaskSet
 from agentbench.orchestrator.harness import run_benchmark
-from agentbench.reporting.aggregate import aggregate
+from agentbench.reporting.aggregate import aggregate, comparable_repos
 from agentbench.reporting.html_report import render_html
 from agentbench.sandbox.discovery import find_executor_binary
 from agentbench.sandbox.executor import SandboxExecutor
@@ -138,6 +138,20 @@ async def amain() -> None:
 
     if len(report.models) > 1:
         print("\n  Overlapping confidence intervals mean this run does not separate the models.")
+
+    if report.repos:
+        print("\n  By repository:")
+        for repo in report.repos:
+            rate = "n/a" if repo.pass_rate is None else f"{repo.pass_rate:.0%}"
+            tools = "—" if repo.tool_calls.mean is None else f"{repo.tool_calls.mean:.0f}"
+            print(
+                f"    {repo.repo_id}: {rate} over {repo.n_tasks} tasks, {tools} tool calls per run"
+            )
+        if not comparable_repos(report.repos):
+            print(
+                "    These repositories ran against different models, "
+                "so they cannot be compared to each other."
+            )
 
 
 def main() -> None:
