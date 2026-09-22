@@ -31,6 +31,11 @@ _HANDSHAKE_TIMEOUT_S = 30
 # Slack on top of the command's own deadline. The executor enforces the
 # timeout itself; this only catches an executor that has stopped responding.
 _RESPONSE_GRACE_S = 60
+# asyncio's StreamReader defaults to a 64 KiB line limit, and a protocol
+# message is one line. That is far too small: reading a 64 KB file is ~87 KB
+# of base64, and a test run's output is routinely larger. Exceeding the limit
+# raises inside the reader, which used to leave every later call hanging.
+_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
 
 
 class ExecutorProtocolError(RuntimeError):
@@ -47,6 +52,7 @@ class SubprocessExecutor:
         self._sinks: dict[int, OutputSink] = {}
         self._next_id = 0
         self._start_lock = asyncio.Lock()
+        self._broken: Exception | None = None
         self.handshake: Handshake | None = None
 
     # --- process lifecycle ------------------------------------------------
@@ -61,6 +67,7 @@ class SubprocessExecutor:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 # stderr stays on ours: the executor logs there by contract
+                limit=_MAX_MESSAGE_BYTES,
             )
             self._process = process
             # Read the handshake before the reader task exists: two
@@ -93,6 +100,7 @@ class SubprocessExecutor:
 
     async def _read_loop(self, process: asyncio.subprocess.Process) -> None:
         assert process.stdout is not None
+        reason = ExecutorProtocolError(f"{self._binary} exited unexpectedly")
         try:
             while True:
                 line = await process.stdout.readline()
@@ -101,9 +109,14 @@ class SubprocessExecutor:
                 self._dispatch(json.loads(line))
         except asyncio.CancelledError:
             raise
+        except Exception as exc:  # an unreadable stream, not a failed command
+            reason = ExecutorProtocolError(f"{self._binary} stream failed: {exc}")
         finally:
-            # The executor is gone; nothing will answer the outstanding calls.
-            self._fail_pending(ExecutorProtocolError(f"{self._binary} exited unexpectedly"))
+            # Nothing will answer the outstanding calls, and nothing will
+            # answer future ones either: without this the next call writes to
+            # a process with no reader and waits forever.
+            self._broken = reason
+            self._fail_pending(reason)
 
     def _dispatch(self, message: dict[str, Any]) -> None:
         if "stream" in message:
@@ -156,6 +169,8 @@ class SubprocessExecutor:
         on_output: OutputSink | None = None,
         timeout_s: float | None = None,
     ) -> dict[str, Any]:
+        if self._broken is not None:
+            raise self._broken
         process = await self._ensure_started()
         assert process.stdin is not None
 

@@ -36,6 +36,16 @@ async def test_binary_survives_the_round_trip(sandbox: Sandbox):
     assert await sandbox.executor.read_bytes(sandbox.handle, "blob.bin") == blob
 
 
+async def test_a_large_file_survives_the_round_trip(sandbox: Sandbox):
+    """Every payload in this suite used to be a few bytes, which hid a 64 KiB
+    ceiling in the subprocess client: one protocol message is one line, and
+    anything line-delimited has a buffer limit somewhere. Repository files
+    are routinely bigger than a small one."""
+    blob = bytes(range(256)) * 4096  # 1 MiB, deterministic
+    await sandbox.executor.write_bytes(sandbox.handle, "big.bin", blob)
+    assert await sandbox.executor.read_bytes(sandbox.handle, "big.bin") == blob
+
+
 async def test_empty_file_round_trips(sandbox: Sandbox):
     await sandbox.executor.write_bytes(sandbox.handle, "empty.txt", b"")
     assert await sandbox.executor.read_bytes(sandbox.handle, "empty.txt") == b""
@@ -112,6 +122,14 @@ async def test_a_file_written_through_the_api_is_visible_to_commands(sandbox: Sa
     await sandbox.executor.write_file(sandbox.handle, "written.txt", "by the api\n")
     result = await sandbox.executor.exec(sandbox.handle, ["cat", "written.txt"], 30)
     assert "by the api" in result.stdout
+
+
+async def test_large_command_output_is_returned_whole(sandbox: Sandbox):
+    """A real test run produces far more output than a toy command."""
+    sandbox.require("process")
+    result = await sandbox.executor.exec(sandbox.handle, ["seq", "1", "200000"], 60)
+    assert result.exit_code == 0
+    assert result.stdout.count("\n") == 200000
 
 
 async def test_timeout_is_reported_not_raised(sandbox: Sandbox):

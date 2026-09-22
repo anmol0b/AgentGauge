@@ -19,6 +19,13 @@ The executor is a child process. The client writes requests to its **stdin**
 and reads messages from its **stdout**, one JSON object per line (`\n`
 terminated, no embedded newlines).
 
+**Messages can be large.** One message is one line, and a `read_bytes`
+result carries a whole file as base64. A client reading with a fixed line
+buffer must size it accordingly — asyncio's 64 KiB default is far too small,
+and the Python client raises it to 64 MiB. Treat that as the practical
+ceiling on a single message; a future major version would move to
+length-prefixed framing to remove the cliff entirely.
+
 **stdout carries protocol messages and nothing else.** An executor that prints
 a log line to stdout corrupts the stream. Diagnostics go to **stderr**, which
 the client may capture but never parses.
