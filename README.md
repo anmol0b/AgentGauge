@@ -99,6 +99,21 @@ codebases; `agentbench/tasks/real_repos.example.yaml` documents how to build tas
 from real upstream bugfix commits (pin `repo_ref`, or the task stops being
 reproducible the moment the branch moves).
 
+### Security
+
+This tool executes code written by a language model. Agent commands run in a
+container with **no network**, which is the main containment, but a container
+is not a hard boundary against a determined escape — benchmark models or
+repositories you distrust on a disposable machine.
+
+**Task files are trusted input.** `repo_url` is cloned or copied on the
+**host**, before any sandbox exists, so a task set is closer to a shell script
+than to configuration. Fields that reach a git command line are validated, but
+only run task sets you would run as a script.
+
+Full trust boundaries, including what is deliberately not defended:
+`docs/SECURITY.md`.
+
 ### Limitations
 
 - **No paid model has been benchmarked yet.** Every run in the committed database is

@@ -157,6 +157,12 @@ def _materialize_repo(repo_url: str, tmp: Path, repo_ref: str | None = None) -> 
 
     `repo_ref` pins the checkout. Leaving it unset on a real repository makes
     the task irreproducible as soon as the default branch moves.
+
+    This runs on the host, before any sandbox exists, so both arguments are
+    validated on Task (see models/task.py). The measures here are the second
+    layer: `--` so a value can never be read as an option, and refusing the
+    `ext` transport, which runs an arbitrary command and which a user with
+    protocol.ext.allow=always in their git config would otherwise get.
     """
     dest = tmp / "repo"
     source = Path(repo_url).expanduser()
@@ -176,7 +182,19 @@ def _materialize_repo(repo_url: str, tmp: Path, repo_ref: str | None = None) -> 
                 "baseline",
             )
     else:
-        subprocess.run(["git", "clone", "-q", repo_url, str(dest)], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "protocol.ext.allow=never",
+                "clone",
+                "-q",
+                "--",
+                repo_url,
+                str(dest),
+            ],
+            check=True,
+        )
     if repo_ref:
         _git(dest, "checkout", "-q", repo_ref)
     return dest
