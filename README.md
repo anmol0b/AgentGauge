@@ -94,10 +94,15 @@ fast, offline, and useful for smoke-testing the harness. Difficulty runs from
 one-line fixes to `pagination-partial-page-bug`, where the obvious fix passes the
 failing test and breaks two passing ones.
 
-They are toy repos. A high pass rate on them is not evidence a model is good at real
-codebases; `agentbench/tasks/real_repos.example.yaml` documents how to build tasks
-from real upstream bugfix commits (pin `repo_ref`, or the task stops being
-reproducible the moment the branch moves).
+They are toy repos, so a high pass rate on them is not evidence a model is good at
+real codebases. `agentbench/tasks/real_repos.yaml` holds tasks built from real
+upstream bugs — pinned at the commit before each fix, with the fix's test restored.
+Its header documents how to add more.
+
+Every real task is verified in CI against an actual clone: the declared test must
+fail at the pinned commit, and applying the upstream fix must make it pass. A task
+that is already solved, or that no fix resolves, fails the build rather than
+quietly scoring every model at one or zero.
 
 ### Security
 

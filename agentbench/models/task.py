@@ -33,6 +33,11 @@ class Task(BaseModel):
     # real repos: an unpinned upstream makes results irreproducible the moment
     # the default branch moves.
     repo_ref: str | None = None
+    # The upstream commit that fixed this bug, when the task was built from
+    # one. Provenance, and what lets CI prove the task is solvable: applying
+    # this commit must make the failing test pass. Never shown to the agent —
+    # it is the answer.
+    fix_ref: str | None = None
     # Which repository this task exercises. Several tasks usually share one.
     # Scoring a repo (rather than a model) means grouping runs by this, so it
     # is recorded on every run from the start — back-filling it later, once
@@ -56,7 +61,7 @@ class Task(BaseModel):
                 )
         return value
 
-    @field_validator("repo_ref")
+    @field_validator("repo_ref", "fix_ref")
     @classmethod
     def _check_repo_ref(cls, value: str | None) -> str | None:
         # `git checkout -- <ref>` is not accepted, so the ref itself has to be
@@ -64,7 +69,7 @@ class Task(BaseModel):
         # unvalidated ref rewrites the checkout.
         if value is not None and not _SAFE_REF.match(value):
             raise ValueError(
-                f"repo_ref is not a plausible git ref: {value!r}. "
+                f"ref is not a plausible git ref: {value!r}. "
                 f"Expected a commit sha, branch, tag or refs/... path."
             )
         return value

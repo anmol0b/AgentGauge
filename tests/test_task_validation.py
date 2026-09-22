@@ -78,6 +78,22 @@ def test_unsafe_refs_are_refused(repo_ref):
         task(repo_ref=repo_ref)
 
 
+def test_fix_ref_is_validated_like_repo_ref():
+    assert task(fix_ref="ec1ff9f6728f5f857402b294c218be731c62af5f").fix_ref
+    with pytest.raises(ValidationError, match="plausible git ref"):
+        task(fix_ref="--orphan")
+
+
+def test_fix_ref_is_never_shown_to_the_agent():
+    """It is the answer. The instruction is built from the task, so this is
+    worth asserting rather than assuming."""
+    import inspect
+
+    from agentbench.orchestrator import runner
+
+    assert "fix_ref" not in inspect.getsource(runner._instruction)
+
+
 def test_the_clone_refuses_the_ext_transport_and_ends_options():
     """Second layer, in case a Task is constructed some other way."""
     import inspect
