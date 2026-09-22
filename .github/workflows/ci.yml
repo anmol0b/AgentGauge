@@ -68,6 +68,24 @@ jobs:
       - name: pytest
         run: pytest tests/ -m "not docker" -W error --cov=agentbench --cov-report=term-missing
 
+  rust:
+    name: Rust lint and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test --all
+
   sandbox:
     name: Docker sandbox
     runs-on: ubuntu-latest
@@ -77,8 +95,16 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]"
+      # The conformance suite runs against the Rust executor too, and skips
+      # it when no binary exists — so build one, or that half goes untested.
+      - name: Build the executor binary
+        run: cargo build --release --manifest-path rust/Cargo.toml
       # The docker test skips itself when no daemon answers. Without this,
       # a runner without Docker would pass the job having run nothing.
       - name: Require a Docker daemon
@@ -88,9 +114,9 @@ jobs:
       # The one test that needs a daemon. It is skipped on laptops, so without
       # this job the Docker executor — the component that actually isolates
       # untrusted agent output — would never be exercised anywhere.
-      # Includes tests/conformance/ against the Docker executor: the contract
-      # every implementation must satisfy, and the only place the process,
-      # timeout and streaming halves of it are actually exercised.
+      # tests/conformance/ runs against both the Python and Rust executors
+      # here: the contract every implementation must satisfy, and the only
+      # place the process, timeout and streaming halves are exercised.
       - name: Docker integration and conformance tests
         run: pytest tests/ -m docker -v -rs
 
