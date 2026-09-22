@@ -103,3 +103,33 @@ def test_the_clone_refuses_the_ext_transport_and_ends_options():
     source = inspect.getsource(runner._materialize_repo)
     assert "protocol.ext.allow=never" in source
     assert '"--",' in source  # nothing after this is read as an option
+
+
+def test_pointing_a_task_at_another_repo_rederives_repo_id():
+    """repo_id is what runs are grouped by, so carrying the old one files
+    every run under a repository the task is no longer using."""
+    original = task(repo_url="agentbench/tasks/fixtures/calc_repo")
+    assert original.repo_id == "calc_repo"
+
+    moved = original.pointed_at("https://github.com/other/thing.git")
+    assert moved.repo_id == "thing"
+    assert moved.repo_url == "https://github.com/other/thing.git"
+    assert original.repo_id == "calc_repo"  # the original is untouched
+
+
+def test_pointing_at_another_repo_drops_an_explicit_repo_id():
+    moved = task(repo_id="pinned").pointed_at("https://github.com/other/thing.git")
+    assert moved.repo_id == "thing"
+
+
+def test_pointing_at_another_repo_keeps_everything_else():
+    original = task(repo_ref="a1b2c3d", difficulty="hard", setup_commands=["make"])
+    moved = original.pointed_at("https://github.com/other/thing.git")
+    assert moved.repo_ref == "a1b2c3d"
+    assert moved.difficulty == "hard"
+    assert moved.setup_commands == ["make"]
+
+
+def test_pointing_at_an_invalid_repo_is_still_refused():
+    with pytest.raises(ValidationError, match="may not start with"):
+        task().pointed_at("--upload-pack=evil")

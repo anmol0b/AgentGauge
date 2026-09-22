@@ -91,8 +91,7 @@ async def amain() -> None:
     args = parse_args()
     taskset = TaskSet(**yaml.safe_load(Path(args.tasks).read_text()))
     if args.repo:
-        for task in taskset.tasks:
-            task.repo_url = args.repo
+        taskset.tasks = [task.pointed_at(args.repo) for task in taskset.tasks]
     executor = make_executor(args.executor)
     run_set_id = uuid.uuid4().hex[:12]
 
