@@ -19,6 +19,7 @@ from agentbench.models.report import (
     DifficultyBreakdown,
     Interval,
     ModelSummary,
+    RepoSummary,
     Stat,
     VarianceReport,
 )
@@ -30,10 +31,13 @@ _Z = 1.96  # 95%
 def aggregate(runs: list[RunResult]) -> AggregateReport:
     by_task_model: dict[tuple[str, str], list[RunResult]] = defaultdict(list)
     by_model: dict[str, list[RunResult]] = defaultdict(list)
+    by_repo: dict[str, list[RunResult]] = defaultdict(list)
     by_difficulty: dict[tuple[str, str], list[RunResult]] = defaultdict(list)
     for run in runs:
         by_task_model[(run.task_id, run.model)].append(run)
         by_model[run.model].append(run)
+        if run.repo_id:
+            by_repo[run.repo_id].append(run)
         if run.difficulty:
             by_difficulty[(run.model, run.difficulty)].append(run)
 
@@ -43,6 +47,7 @@ def aggregate(runs: list[RunResult]) -> AggregateReport:
             for (task_id, model), group in sorted(by_task_model.items())
         ],
         models=[_model(model, group) for model, group in sorted(by_model.items())],
+        repos=[_repo(repo_id, group) for repo_id, group in sorted(by_repo.items())],
         by_difficulty=[
             DifficultyBreakdown(
                 model=model,
@@ -116,6 +121,46 @@ def _model(model: str, group: list[RunResult]) -> ModelSummary:
         tokens_in=_stat([r.tokens_in for r in valid]),
         tokens_out=_stat([r.tokens_out for r in valid]),
     )
+
+
+def _repo(repo_id: str, group: list[RunResult]) -> RepoSummary:
+    valid = _valid(group)
+    priced = [r.cost_usd for r in valid if r.cost_usd is not None]
+    difficulty_mix: dict[str, int] = {}
+    for difficulty in {r.difficulty for r in group if r.difficulty}:
+        tasks = {r.task_id for r in group if r.difficulty == difficulty}
+        difficulty_mix[difficulty] = len(tasks)
+
+    return RepoSummary(
+        repo_id=repo_id,
+        n_tasks=len({r.task_id for r in group}),
+        n_runs=len(group),
+        n_valid=len(valid),
+        pass_rate=_rate(valid),
+        pass_rate_ci=_wilson(sum(r.passed for r in valid), len(valid)),
+        error_rate=(len(group) - len(valid)) / len(group) if group else 0.0,
+        tool_calls=_stat([r.tool_call_count for r in valid]),
+        tokens_in=_stat([r.tokens_in for r in valid]),
+        n_priced=len(priced),
+        cost_mean=statistics.fmean(priced) if priced else None,
+        regressed_count=sum(1 for r in valid if r.regressions),
+        tampered_count=sum(1 for r in valid if r.tampered_tests),
+        models=sorted({r.model for r in group}),
+        difficulty_mix=dict(
+            sorted(difficulty_mix.items(), key=lambda kv: _DIFFICULTY_ORDER(kv[0]))
+        ),
+    )
+
+
+def comparable_repos(repos: list[RepoSummary]) -> bool:
+    """Whether ranking these against each other would mean anything.
+
+    It does not if they were run against different models: a repo evaluated
+    only with a weak model will look hostile to agents when the difference is
+    the model. Difficulty spread matters too, but models are the disqualifier.
+    """
+    model_sets = {tuple(repo.models) for repo in repos}
+    return len(model_sets) <= 1
 
 
 def _stat(values: list[float]) -> Stat:

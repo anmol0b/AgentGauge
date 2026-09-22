@@ -71,6 +71,20 @@ Results are appended to `agentbench.db` (SQLite). Each invocation gets a run-set
 and the report covers **only that invocation** — pass `--all-history` to aggregate
 every run in the database instead (which mixes separate sessions into one pass rate).
 
+### Scoring a repository, not just a model
+
+Runs are grouped by `repo_id` as well as by model, so the report answers
+"how well do agents work *in this codebase*" and not only "which model is
+better". That side is a **profile rather than a single score**: pass rate,
+tool calls per run, tokens, cost, and how often a run caused a regression or
+was disqualified. A repo where agents pass often but take thirty tool calls
+and break a neighbouring test is not the same as one where they pass often,
+cheaply and cleanly.
+
+Repositories evaluated against **different models are not compared**. The
+report says so instead of ranking them — otherwise a repo tested only with a
+weak model looks hostile to agents when the difference is the model.
+
 ### Scoring rules
 
 - **Pass rates carry a 95% confidence interval.** At N=3, three passes is not

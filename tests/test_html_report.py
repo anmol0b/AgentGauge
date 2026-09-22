@@ -83,3 +83,51 @@ def test_report_breaks_down_by_difficulty(tmp_path):
 def test_difficulty_section_omitted_when_unknown(tmp_path):
     html = render_html(aggregate([_run()]), tmp_path / "r.html").read_text()
     assert "By difficulty" not in html
+
+
+def _repo_run(repo_id, task_id, **overrides):
+    run = _run(task_id=task_id, **overrides)
+    run.repo_id = repo_id
+    return run
+
+
+def test_report_has_a_repositories_section(tmp_path):
+    runs = [_repo_run("alpha", "a1"), _repo_run("beta", "b1", run_index=1)]
+    html = render_html(aggregate(runs), tmp_path / "r.html").read_text()
+    assert "<h2>Repositories</h2>" in html
+    assert "alpha" in html and "beta" in html
+
+
+def test_repositories_section_omitted_when_no_run_has_a_repo(tmp_path):
+    html = render_html(aggregate([_run()]), tmp_path / "r.html").read_text()
+    assert "<h2>Repositories</h2>" not in html
+
+
+def test_report_refuses_to_rank_repos_run_against_different_models(tmp_path):
+    """A repo tested only with a weak model looks hostile to agents when the
+    difference is the model."""
+    mixed = [
+        _repo_run("alpha", "a1", model="m1"),
+        _repo_run("beta", "b1", model="m2", run_index=1),
+    ]
+    html = render_html(aggregate(mixed), tmp_path / "r.html").read_text()
+    assert "not comparable to each other" in html
+
+    same = [
+        _repo_run("alpha", "a1", model="m1"),
+        _repo_run("beta", "b1", model="m1", run_index=1),
+    ]
+    html = render_html(aggregate(same), tmp_path / "r.html").read_text()
+    assert "not comparable to each other" not in html
+
+
+def test_difficulty_mix_is_readable(tmp_path):
+    """It used to render as the literal text 'easy&times;1'."""
+    runs = [
+        _repo_run("alpha", "a1", difficulty="easy"),
+        _repo_run("alpha", "a2", difficulty="hard", run_index=1),
+        _repo_run("alpha", "a3", difficulty="hard", run_index=2),
+    ]
+    html = render_html(aggregate(runs), tmp_path / "r.html").read_text()
+    assert "1 easy, 2 hard" in html
+    assert "&amp;times;" not in html

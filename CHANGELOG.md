@@ -30,6 +30,10 @@ Nothing has been released yet. 0.1.0 will be the first tag.
   (`docs/BENCHMARKS.md`), measured rather than asserted.
 - Medium and hard benchmark tasks, including one where the obvious fix passes
   the failing test and breaks two passing ones.
+- **Repository scoring.** Runs group by `repo_id`, so the report answers how
+  well agents work *in a codebase* and not only which model is better. A
+  profile rather than a single score, and repositories evaluated against
+  different models are explicitly not compared.
 - Per-run phase timings (`setup_s`, `agent_s`, `grading_s`).
 - A strict CI suite: lint, format, `mypy --strict`, a Python version matrix,
   a coverage floor, the Docker sandbox, Rust lint and tests, dependency audit.

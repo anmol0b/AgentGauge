@@ -64,6 +64,38 @@ class ModelSummary(BaseModel):
     tokens_out: Stat = Stat()
 
 
+class RepoSummary(BaseModel):
+    """One repository across every task and model run against it.
+
+    Deliberately a profile rather than a single "AI-friendliness score". A
+    repo where agents pass often but take 30 tool calls and break a
+    neighbouring test is not the same as one where they pass often, quickly
+    and cleanly, and collapsing those into one number hides the thing you
+    would actually want to act on.
+    """
+
+    repo_id: str
+    n_tasks: int = 0
+    n_runs: int = 0
+    n_valid: int = 0
+    pass_rate: float | None = None
+    pass_rate_ci: Interval | None = None
+    error_rate: float = 0.0
+    # how much work a fix took, and what it cost to get there
+    tool_calls: Stat = Stat()
+    tokens_in: Stat = Stat()
+    n_priced: int = 0
+    cost_mean: float | None = None
+    # how often working here goes wrong in ways a pass rate does not show
+    regressed_count: int = 0
+    tampered_count: int = 0
+    # Two repos are only comparable when the same models were run against a
+    # comparable spread of tasks. Both are carried so the report can say when
+    # they are not, instead of ranking things that cannot be ranked.
+    models: list[str] = []
+    difficulty_mix: dict[str, int] = {}
+
+
 class DifficultyBreakdown(BaseModel):
     model: str
     difficulty: str
@@ -74,5 +106,6 @@ class DifficultyBreakdown(BaseModel):
 class AggregateReport(BaseModel):
     variance: list[VarianceReport]
     models: list[ModelSummary] = []
+    repos: list[RepoSummary] = []
     by_difficulty: list[DifficultyBreakdown] = []
     runs: list[RunResult]
