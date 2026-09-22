@@ -16,7 +16,8 @@ from agentbench.models.task import TaskSet
 from agentbench.orchestrator.harness import run_benchmark
 from agentbench.reporting.aggregate import aggregate
 from agentbench.reporting.html_report import render_html
-from agentbench.sandbox.docker_executor import DockerSandboxExecutor
+from agentbench.sandbox.discovery import find_executor_binary
+from agentbench.sandbox.executor import SandboxExecutor
 from agentbench.storage.db import RunStore
 
 
@@ -45,6 +46,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--db", default="agentbench.db", help="SQLite run history path")
     parser.add_argument("--out", default="report.html", help="HTML report output path")
     parser.add_argument(
+        "--executor",
+        choices=("auto", "rust", "python"),
+        default="auto",
+        help="Sandbox executor. auto uses the Rust binary when one is available "
+        "and falls back to the in-process Python one.",
+    )
+    parser.add_argument(
         "--all-history",
         action="store_true",
         help="Report over every run ever recorded in --db, not just this invocation. "
@@ -53,13 +61,39 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def make_executor(choice: str) -> SandboxExecutor:
+    """Resolve --executor to an implementation.
+
+    Both satisfy the same contract (tests/conformance/), so this only picks
+    which one runs; it is not a behavioural switch.
+    """
+    from agentbench.sandbox.docker_executor import DockerSandboxExecutor
+
+    if choice == "python":
+        return DockerSandboxExecutor()
+
+    binary = find_executor_binary()
+    if binary is None:
+        if choice == "rust":
+            raise RuntimeError(
+                "no executor binary found. Build one with "
+                "`cargo build --release` in rust/, or use --executor python."
+            )
+        return DockerSandboxExecutor()
+
+    from agentbench.sandbox.subprocess_executor import SubprocessExecutor
+
+    print(f"using executor binary: {binary}")
+    return SubprocessExecutor(binary)
+
+
 async def amain() -> None:
     args = parse_args()
     taskset = TaskSet(**yaml.safe_load(Path(args.tasks).read_text()))
     if args.repo:
         for task in taskset.tasks:
             task.repo_url = args.repo
-    executor = DockerSandboxExecutor()
+    executor = make_executor(args.executor)
     run_set_id = uuid.uuid4().hex[:12]
 
     results = await run_benchmark(

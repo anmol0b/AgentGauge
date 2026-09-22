@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+from agentbench.sandbox.discovery import find_executor_binary
 from agentbench.sandbox.protocol import SandboxHandle
 from tests.fakes import FakeExecutor, host_path
 
@@ -46,6 +47,22 @@ def _docker() -> Any:
     return DockerSandboxExecutor()
 
 
+def _rust_binary() -> Any:
+    """None when no binary is built or installed — an sdist has none."""
+    try:
+        return find_executor_binary()
+    except FileNotFoundError:
+        return None
+
+
+def _rust() -> Any:
+    from agentbench.sandbox.subprocess_executor import SubprocessExecutor
+
+    binary = _rust_binary()
+    assert binary is not None  # guarded by the skipif below
+    return SubprocessExecutor(binary)
+
+
 IMPLEMENTATIONS = [
     pytest.param(
         Implementation(name="fake", make=FakeExecutor, capabilities={"files"}),
@@ -61,6 +78,24 @@ IMPLEMENTATIONS = [
         marks=[
             pytest.mark.docker,
             pytest.mark.skipif(not _daemon_up, reason="Docker daemon not available"),
+        ],
+    ),
+    pytest.param(
+        Implementation(
+            name="rust",
+            make=_rust,
+            # The Rust executor must satisfy exactly what the Python one does.
+            # Anything it cannot do is a gap, not a different capability set.
+            capabilities={"files", "process", "stream", "repo"},
+        ),
+        id="rust",
+        marks=[
+            pytest.mark.docker,
+            pytest.mark.skipif(not _daemon_up, reason="Docker daemon not available"),
+            pytest.mark.skipif(
+                _rust_binary() is None,
+                reason="executor binary not built (cargo build --release in rust/)",
+            ),
         ],
     ),
 ]
@@ -102,3 +137,7 @@ async def sandbox(request: Any, tmp_path: Path) -> AsyncIterator[Sandbox]:
         )
     finally:
         await executor.teardown(handle)
+        # an out-of-process executor also has to be shut down
+        closer = getattr(executor, "aclose", None)
+        if closer is not None:
+            await closer()

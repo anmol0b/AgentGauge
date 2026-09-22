@@ -114,13 +114,32 @@ reproducible the moment the branch moves).
   inflates its recorded cost and token count for that run.
 - Regression detection and `--junitxml` assume pytest.
 
-### Writing another executor
+### Executors
 
 The sandbox sits behind one narrow interface, so it can be reimplemented in
-another language without touching evaluation logic. `docs/PROTOCOL.md`
-specifies the wire form; `tests/conformance/` is the normative definition of
-correct behaviour, and an implementation is conformant when that suite passes
-against it.
+another language without touching evaluation logic. Two implementations ship,
+and both pass the same contract:
+
+| `--executor` | What runs |
+|---|---|
+| `auto` (default) | The Rust binary when one is found, else the Python one |
+| `rust` | `agentbench-executord`, a separate process speaking the protocol |
+| `python` | In-process docker-py. The reference implementation and fallback |
+
+`auto` looks for the binary at `$AGENTBENCH_EXECUTOR`, then beside the
+installed package, then on `PATH`, then in `rust/target/{release,debug}` — so
+a `cargo build --release` in a checkout is picked up with no further setup.
+Finding none is normal: an sdist install has no binary and uses Python.
+
+`docs/PROTOCOL.md` specifies the wire form; `tests/conformance/` is the
+normative definition of correct behaviour, and an implementation is
+conformant when that suite passes against it.
+
+```sh
+cd rust && cargo build --release        # build the executor
+cargo test --all && cargo clippy --all-targets -- -D warnings
+cd .. && .venv/bin/pytest tests/conformance   # all implementations
+```
 
 ### Development
 
