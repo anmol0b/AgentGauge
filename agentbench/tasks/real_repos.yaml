@@ -1,0 +1,54 @@
+# Tasks built from real upstream bugs.
+#
+# Each one pins the commit *before* an upstream fix, then restores that fix's
+# test file. The result is a repository in the state a maintainer was actually
+# in: a failing test describing a real bug, and the rest of the code untouched.
+#
+# Construction, for adding more:
+#   1. Find a commit that fixed a bug and changed tests alongside source.
+#   2. repo_ref = its parent — where the bug is still present.
+#   3. setup_commands restores the fix's test file with `git checkout <fix>
+#      -- <test path>`. This works offline: the sandbox has no network, but
+#      the clone happens host-side and carries the whole object store, so the
+#      fix commit is present even though the checkout is at its parent.
+#   4. fix_ref = the fix, so CI can prove the task is solvable.
+#
+# `tests/test_real_repo_tasks.py` verifies every task here against a real
+# clone: the declared test must fail, and applying fix_ref must make it pass.
+# A task that does not hold up fails CI rather than quietly scoring every
+# model at zero (or at one).
+#
+# These need network at clone time (host-side) and the standard sandbox image.
+# boltons has no runtime dependencies, which is why no task-specific image is
+# needed; a repo with dependencies would need one, since the sandbox has no
+# network to install them at run time.
+
+tasks:
+  # A typo — `issupserset` for `issuperset` — in _ComplementSet's <= and >=.
+  # The symptom is confined to comparisons between two complement sets, so
+  # the failing assertion is several steps from the misspelled attribute.
+  - id: boltons-complement-set-superset
+    repo_url: https://github.com/mahmoud/boltons.git
+    repo_id: boltons
+    repo_ref: b5c495bec206741ec25cd82ecc869e0b59bb0d10
+    fix_ref: ec1ff9f6728f5f857402b294c218be731c62af5f
+    setup_commands:
+      - "git checkout ec1ff9f6728f5f857402b294c218be731c62af5f -- tests/test_setutils.py"
+    failing_test_command: "pytest tests/test_setutils.py::test_complement_set"
+    full_test_command: "pytest tests/"
+    difficulty: medium
+
+  # BarrelList deleted a slice spanning several barrels in the wrong order:
+  # removing the intermediate barrels first invalidates the index used for
+  # the start barrel. The fix is a two-line reorder, and finding it means
+  # understanding what the indices refer to rather than reading the diff.
+  - id: boltons-barrellist-cross-barrel-delete
+    repo_url: https://github.com/mahmoud/boltons.git
+    repo_id: boltons
+    repo_ref: 967864f89791509f9eb36b22b4579d36b72a6df2
+    fix_ref: 91b2bb47ae9b22953f61c17c20860bcb7dd1d6b1
+    setup_commands:
+      - "git checkout 91b2bb47ae9b22953f61c17c20860bcb7dd1d6b1 -- tests/test_listutils.py"
+    failing_test_command: "pytest tests/test_listutils.py::test_barrellist_delete_across_multiple_barrels"
+    full_test_command: "pytest tests/"
+    difficulty: hard
