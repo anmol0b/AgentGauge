@@ -63,3 +63,53 @@ def test_cli_requires_tasks_and_model(monkeypatch):
         _args(["--model", "claude-opus-5"], monkeypatch)
     with pytest.raises(SystemExit):
         _args(["--tasks", "t.yaml"], monkeypatch)
+
+
+# --- executor selection ---------------------------------------------------
+# An install with no Rust anywhere must still work: sdist builds, platforms
+# with no wheel, and contributors who do not want the toolchain all land on
+# the Python executor.
+
+
+class _FakeDocker:
+    """Stands in for DockerSandboxExecutor, whose __init__ pings the daemon."""
+
+
+@pytest.fixture
+def no_daemon(monkeypatch):
+    monkeypatch.setattr("agentbench.sandbox.docker_executor.DockerSandboxExecutor", _FakeDocker)
+
+
+def _binary(monkeypatch, path):
+    monkeypatch.setattr("agentbench.cli.find_executor_binary", lambda: path)
+
+
+def test_auto_prefers_the_binary_when_one_exists(monkeypatch, no_daemon, tmp_path):
+    from agentbench.cli import make_executor
+    from agentbench.sandbox.subprocess_executor import SubprocessExecutor
+
+    _binary(monkeypatch, tmp_path / "agentbench-executord")
+    assert isinstance(make_executor("auto"), SubprocessExecutor)
+
+
+def test_auto_falls_back_to_python_with_no_binary(monkeypatch, no_daemon):
+    from agentbench.cli import make_executor
+
+    _binary(monkeypatch, None)
+    assert isinstance(make_executor("auto"), _FakeDocker)
+
+
+def test_python_is_used_even_when_a_binary_exists(monkeypatch, no_daemon, tmp_path):
+    from agentbench.cli import make_executor
+
+    _binary(monkeypatch, tmp_path / "agentbench-executord")
+    assert isinstance(make_executor("python"), _FakeDocker)
+
+
+def test_rust_without_a_binary_says_how_to_get_one(monkeypatch, no_daemon):
+    """Silently falling back would hide that the choice was not honoured."""
+    from agentbench.cli import make_executor
+
+    _binary(monkeypatch, None)
+    with pytest.raises(RuntimeError, match="cargo build"):
+        make_executor("rust")
