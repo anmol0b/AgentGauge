@@ -1,0 +1,26 @@
+name: Add a task or a model
+description: A benchmark task, a fixture, or a model that is not priced
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What are you adding
+      options: ["A benchmark task", "A model in pricing.yaml", "Something else"]
+    validations:
+      required: true
+
+  - type: textarea
+    id: detail
+    attributes:
+      label: Details
+      description: |
+        For a task: which repository, which commit, which test fails, and how you
+        confirmed the rest of the suite passes at that commit. A task is a claim —
+        see `tests/test_task_integrity.py`.
+
+        For a model: the model id and its per-million input/output rates, with a
+        link. An unpriced model reports no cost rather than a guess, so the rate
+        needs a source.
+    validations:
+      required: true
