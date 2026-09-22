@@ -1,7 +1,7 @@
 import pytest
 
 from agentbench.models.run import RunResult
-from agentbench.reporting.aggregate import aggregate
+from agentbench.reporting.aggregate import aggregate, comparable_repos
 
 
 def _run(
@@ -149,3 +149,80 @@ def test_regressions_are_counted_per_model():
     runs = [_run(run_index=0), _run(run_index=1)]
     runs[1].regressions = ["pkg::test_other"]
     assert aggregate(runs).models[0].regressed_count == 1
+
+
+# --- repository summaries -------------------------------------------------
+# Scoring a repository rather than a model: "is this codebase easy for an
+# agent to work in". Deliberately a profile, not one number.
+
+
+def _repo_run(repo_id, task_id, **overrides):
+    run = _run(task_id=task_id, **overrides)
+    run.repo_id = repo_id
+    return run
+
+
+def test_runs_are_grouped_by_repository():
+    runs = [
+        _repo_run("alpha", "a1"),
+        _repo_run("alpha", "a2", run_index=1),
+        _repo_run("beta", "b1", run_index=2, passed=False),
+    ]
+    repos = {r.repo_id: r for r in aggregate(runs).repos}
+    assert set(repos) == {"alpha", "beta"}
+    assert repos["alpha"].n_tasks == 2
+    assert repos["alpha"].pass_rate == 1.0
+    assert repos["beta"].pass_rate == 0.0
+
+
+def test_a_repo_profile_carries_effort_and_damage_not_just_pass_rate():
+    """Passing often while taking 30 tool calls and breaking a neighbouring
+    test is not the same repo as passing often, cheaply and cleanly."""
+    runs = [_repo_run("alpha", "a1"), _repo_run("alpha", "a2", run_index=1)]
+    runs[0].tool_call_count = 30
+    runs[1].tool_call_count = 10
+    runs[1].regressions = ["pkg::test_other"]
+
+    repo = aggregate(runs).repos[0]
+    assert repo.tool_calls.mean == 20
+    assert repo.regressed_count == 1
+    assert repo.tampered_count == 0
+
+
+def test_repo_difficulty_mix_counts_tasks_not_runs():
+    """Three runs of one easy task is not three easy tasks."""
+    runs = [_repo_run("alpha", "a1", run_index=i) for i in range(3)]
+    for run in runs:
+        run.difficulty = "easy"
+    runs.append(_repo_run("alpha", "a2", run_index=9))
+    runs[-1].difficulty = "hard"
+
+    assert aggregate(runs).repos[0].difficulty_mix == {"easy": 1, "hard": 1}
+
+
+def test_repo_errors_leave_the_pass_rate_denominator():
+    runs = [_repo_run("alpha", "a1"), _repo_run("alpha", "a2", run_index=1, error="boom")]
+    repo = aggregate(runs).repos[0]
+    assert repo.pass_rate == 1.0
+    assert repo.n_valid == 1 and repo.n_runs == 2
+    assert repo.error_rate == 0.5
+
+
+def test_runs_without_a_repo_id_are_left_out():
+    """Pre-v2 rows have none; inventing one would put them in a bucket they
+    were never measured in."""
+    assert aggregate([_run()]).repos == []
+
+
+def test_repos_are_comparable_only_when_the_same_models_ran():
+    """A repo evaluated only with a weak model looks hostile to agents when
+    the difference is the model."""
+    same = aggregate(
+        [_repo_run("alpha", "a1", model="m1"), _repo_run("beta", "b1", model="m1")]
+    ).repos
+    assert comparable_repos(same)
+
+    different = aggregate(
+        [_repo_run("alpha", "a1", model="m1"), _repo_run("beta", "b1", model="m2")]
+    ).repos
+    assert not comparable_repos(different)
