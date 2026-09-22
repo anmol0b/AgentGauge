@@ -3,6 +3,7 @@ capped by a semaphore so we don't blow past Docker/API rate limits.
 """
 
 import asyncio
+import time
 
 from agentbench.agent_loop.loop import DEFAULT_SYSTEM_PROMPT
 from agentbench.models.run import RunResult
@@ -10,7 +11,34 @@ from agentbench.models.task import Task
 from agentbench.orchestrator.runner import DEFAULT_IMAGE, run_once
 from agentbench.providers import make_provider
 from agentbench.providers.base import ModelProvider
-from agentbench.sandbox.executor import SandboxExecutor
+from agentbench.sandbox.executor import OutputChunk, OutputSink, SandboxExecutor
+
+# One progress line per run at most this often. A test suite produces far too
+# much output to relay, and several runs execute concurrently, so the useful
+# signal is "still moving, here is where" rather than the output itself.
+PROGRESS_INTERVAL_S = 10.0
+
+
+def _progress_sink(label: str, interval_s: float = PROGRESS_INTERVAL_S) -> OutputSink:
+    """Report that a long command is still producing output.
+
+    Without this a five-minute test run shows nothing until it finishes,
+    which is indistinguishable from a hang.
+    """
+    last_printed = 0.0
+
+    def sink(chunk: OutputChunk) -> None:
+        nonlocal last_printed
+        now = time.monotonic()
+        if now - last_printed < interval_s:
+            return
+        lines = [line for line in chunk.data.splitlines() if line.strip()]
+        if not lines:
+            return
+        last_printed = now
+        print(f"[{label}] {lines[-1][:100]}", flush=True)
+
+    return sink
 
 
 async def run_benchmark(
@@ -36,6 +64,7 @@ async def run_benchmark(
 
     async def one(task: Task, model: str, run_index: int) -> RunResult:
         async with semaphore:
+            label = f"{task.id} | {model} | run {run_index + 1}/{runs_per_task}"
             result = await run_once(
                 task,
                 run_index,
@@ -43,6 +72,7 @@ async def run_benchmark(
                 executor,
                 image=image or DEFAULT_IMAGE,
                 provider=providers.get(model),
+                on_output=_progress_sink(label),
             )
             status = "PASS" if result.passed else "FAIL"
             if result.error:

@@ -12,7 +12,7 @@ from agentbench.models.run import RunResult
 from agentbench.models.task import Task
 from agentbench.providers import make_provider
 from agentbench.providers.base import ModelProvider
-from agentbench.sandbox.executor import SandboxExecutor, SandboxHandle
+from agentbench.sandbox.executor import OutputSink, SandboxExecutor, SandboxHandle
 from agentbench.sandbox.protocol import HostPathRepo
 
 DEFAULT_IMAGE = "python:3.12-slim"
@@ -28,6 +28,7 @@ async def run_once(
     image: str = DEFAULT_IMAGE,
     max_turns: int = 25,
     provider: ModelProvider | None = None,
+    on_output: OutputSink | None = None,
 ) -> RunResult:
     """Run `task` once against `model` and return the measured result.
 
@@ -71,6 +72,7 @@ async def run_once(
                 handle,
                 instruction=await _instruction(executor, handle, task),
                 max_turns=max_turns,
+                on_output=on_output,
             )
             tokens_in = loop_result.usage.tokens_in
             tokens_out = loop_result.usage.tokens_out

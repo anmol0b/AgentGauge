@@ -156,3 +156,42 @@ async def test_missing_api_key_fails_before_any_run(monkeypatch):
     except RuntimeError as exc:
         assert "ANTHROPIC_API_KEY" in str(exc)
     assert calls == []  # nothing was attempted
+
+
+# --- progress reporting ---------------------------------------------------
+
+
+def test_progress_sink_reports_the_latest_line(capsys):
+    """A five-minute test run showing nothing is indistinguishable from a hang."""
+    from agentbench.orchestrator.harness import _progress_sink
+    from agentbench.sandbox.protocol import OutputChunk
+
+    sink = _progress_sink("task | model | run 1/3", interval_s=0)
+    sink(OutputChunk(kind="stdout", data="collected 5 items\ntests/test_a.py .\n"))
+
+    printed = capsys.readouterr().out
+    assert "task | model | run 1/3" in printed
+    assert "tests/test_a.py ." in printed
+
+
+def test_progress_sink_throttles(capsys):
+    """Relaying a test suite's output verbatim, times four concurrent runs,
+    would be unreadable."""
+    from agentbench.orchestrator.harness import _progress_sink
+    from agentbench.sandbox.protocol import OutputChunk
+
+    sink = _progress_sink("label", interval_s=60)
+    for i in range(10):
+        sink(OutputChunk(kind="stdout", data=f"line {i}\n"))
+
+    assert capsys.readouterr().out.count("label") == 1
+
+
+def test_progress_sink_ignores_blank_output(capsys):
+    from agentbench.orchestrator.harness import _progress_sink
+    from agentbench.sandbox.protocol import OutputChunk
+
+    sink = _progress_sink("label", interval_s=0)
+    sink(OutputChunk(kind="stdout", data="\n   \n"))
+
+    assert capsys.readouterr().out == ""

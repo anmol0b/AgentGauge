@@ -8,7 +8,7 @@ from agentbench.agent_loop.tools import TOOLS, execute_tool
 from agentbench.models.provider import Message
 from agentbench.models.run import TokenUsage
 from agentbench.providers.base import ModelProvider
-from agentbench.sandbox.executor import SandboxExecutor, SandboxHandle
+from agentbench.sandbox.executor import OutputSink, SandboxExecutor, SandboxHandle
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a coding agent working in a sandboxed repository. "
@@ -45,6 +45,7 @@ async def run_agent_loop(
     instruction: str,
     max_turns: int = 25,
     exec_timeout_s: int = 120,
+    on_output: OutputSink | None = None,
 ) -> AgentLoopResult:
     messages: list[Message] = [Message(role="user", content=instruction)]
     total_usage = TokenUsage()
