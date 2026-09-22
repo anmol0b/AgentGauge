@@ -25,12 +25,15 @@ def _progress_sink(label: str, interval_s: float = PROGRESS_INTERVAL_S) -> Outpu
     Without this a five-minute test run shows nothing until it finishes,
     which is indistinguishable from a hang.
     """
-    last_printed = 0.0
+    # None, not 0.0: time.monotonic() is measured from an arbitrary point, so
+    # comparing against zero suppresses the first line for interval_s seconds
+    # after boot — on a fresh CI runner, exactly when you want to see it.
+    last_printed: float | None = None
 
     def sink(chunk: OutputChunk) -> None:
         nonlocal last_printed
         now = time.monotonic()
-        if now - last_printed < interval_s:
+        if last_printed is not None and now - last_printed < interval_s:
             return
         lines = [line for line in chunk.data.splitlines() if line.strip()]
         if not lines:

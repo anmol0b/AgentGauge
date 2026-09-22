@@ -195,3 +195,18 @@ def test_progress_sink_ignores_blank_output(capsys):
     sink(OutputChunk(kind="stdout", data="\n   \n"))
 
     assert capsys.readouterr().out == ""
+
+
+def test_progress_sink_reports_immediately_on_a_freshly_booted_machine(capsys, monkeypatch):
+    """time.monotonic() counts from an arbitrary point. Treating 0.0 as
+    "never printed" suppressed the first line for interval_s seconds after
+    boot — invisible on a laptop with days of uptime, and caught by CI."""
+    from agentbench.orchestrator import harness
+    from agentbench.sandbox.protocol import OutputChunk
+
+    # patch the stdlib function harness calls, not an attribute of harness
+    monkeypatch.setattr("time.monotonic", lambda: 0.5)
+    sink = harness._progress_sink("label", interval_s=60)
+    sink(OutputChunk(kind="stdout", data="first line\n"))
+
+    assert "first line" in capsys.readouterr().out
