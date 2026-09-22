@@ -60,6 +60,13 @@ These change what the numbers mean, not just how they look:
 
 ### Fixed
 
+- Streamed output was implemented through the protocol and both executors but
+  never wired to the tool that runs tests, so a long test run still showed
+  nothing until it finished. The harness now prints a throttled progress line
+  per run.
+- `--repo` left `repo_id` at its original value, filing every run under a
+  repository the task was no longer using.
+
 - A 64 KiB line limit in the subprocess client hung every call after a
   response larger than that — a file read or any substantial command output.
 - Docker exec timeouts returned without stopping the command, which then held

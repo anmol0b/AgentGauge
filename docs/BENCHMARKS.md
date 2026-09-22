@@ -39,7 +39,10 @@ container lifecycle each, so the Rust executor saves on the order of
 **So the case for the Rust executor is not speed.** It is:
 
 - **streaming** — output arrives as produced instead of buffering until the
-  command exits, which matters for a five-minute test run
+  command exits, which matters for a five-minute test run. This was claimed
+  here before it was wired up: the tool that runs tests called exec without a
+  sink, so nothing reached a user. It does now, and the harness prints a
+  throttled progress line per run.
 - **container reaping** — one process owns every container it created and
   removes them on SIGTERM; a killed Python client cannot
 - **headroom** — native async rather than a thread pool, which is where the

@@ -156,3 +156,57 @@ async def test_missing_api_key_fails_before_any_run(monkeypatch):
     except RuntimeError as exc:
         assert "ANTHROPIC_API_KEY" in str(exc)
     assert calls == []  # nothing was attempted
+
+
+# --- progress reporting ---------------------------------------------------
+
+
+def test_progress_sink_reports_the_latest_line(capsys):
+    """A five-minute test run showing nothing is indistinguishable from a hang."""
+    from agentbench.orchestrator.harness import _progress_sink
+    from agentbench.sandbox.protocol import OutputChunk
+
+    sink = _progress_sink("task | model | run 1/3", interval_s=0)
+    sink(OutputChunk(kind="stdout", data="collected 5 items\ntests/test_a.py .\n"))
+
+    printed = capsys.readouterr().out
+    assert "task | model | run 1/3" in printed
+    assert "tests/test_a.py ." in printed
+
+
+def test_progress_sink_throttles(capsys):
+    """Relaying a test suite's output verbatim, times four concurrent runs,
+    would be unreadable."""
+    from agentbench.orchestrator.harness import _progress_sink
+    from agentbench.sandbox.protocol import OutputChunk
+
+    sink = _progress_sink("label", interval_s=60)
+    for i in range(10):
+        sink(OutputChunk(kind="stdout", data=f"line {i}\n"))
+
+    assert capsys.readouterr().out.count("label") == 1
+
+
+def test_progress_sink_ignores_blank_output(capsys):
+    from agentbench.orchestrator.harness import _progress_sink
+    from agentbench.sandbox.protocol import OutputChunk
+
+    sink = _progress_sink("label", interval_s=0)
+    sink(OutputChunk(kind="stdout", data="\n   \n"))
+
+    assert capsys.readouterr().out == ""
+
+
+def test_progress_sink_reports_immediately_on_a_freshly_booted_machine(capsys, monkeypatch):
+    """time.monotonic() counts from an arbitrary point. Treating 0.0 as
+    "never printed" suppressed the first line for interval_s seconds after
+    boot — invisible on a laptop with days of uptime, and caught by CI."""
+    from agentbench.orchestrator import harness
+    from agentbench.sandbox.protocol import OutputChunk
+
+    # patch the stdlib function harness calls, not an attribute of harness
+    monkeypatch.setattr("time.monotonic", lambda: 0.5)
+    sink = harness._progress_sink("label", interval_s=60)
+    sink(OutputChunk(kind="stdout", data="first line\n"))
+
+    assert "first line" in capsys.readouterr().out

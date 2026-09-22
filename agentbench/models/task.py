@@ -80,6 +80,16 @@ class Task(BaseModel):
             self.repo_id = Path(self.repo_url.rstrip("/")).name.removesuffix(".git")
         return self
 
+    def pointed_at(self, repo_url: str) -> "Task":
+        """A copy of this task against a different repository.
+
+        repo_id is re-derived rather than carried over: it is the key runs
+        are grouped by, so keeping the old one files every run under the
+        repository the task is no longer using. An explicit repo_id is
+        dropped for the same reason — this is a different repo now.
+        """
+        return Task(**(self.model_dump() | {"repo_url": repo_url, "repo_id": None}))
+
 
 class TaskSet(BaseModel):
     tasks: list[Task]

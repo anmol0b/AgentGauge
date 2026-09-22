@@ -5,7 +5,7 @@ SandboxExecutor — tools never touch Docker or the host filesystem directly.
 from typing import Any
 
 from agentbench.models.provider import ToolSpec
-from agentbench.sandbox.executor import SandboxExecutor, SandboxHandle
+from agentbench.sandbox.executor import OutputChunk, OutputSink, SandboxExecutor, SandboxHandle
 
 MAX_TOOL_OUTPUT_CHARS = 30_000
 
@@ -67,6 +67,7 @@ async def execute_tool(
     executor: SandboxExecutor,
     handle: SandboxHandle,
     exec_timeout_s: int,
+    on_output: OutputSink | None = None,
 ) -> str:
     try:
         if name == "read_file":
@@ -77,10 +78,28 @@ async def execute_tool(
         if name == "edit":
             return await _edit(executor, handle, args)
         if name == "run_tests":
+            # Streamed rather than buffered. The model still gets the whole
+            # output at the end, but the operator sees a long test run make
+            # progress, and the transport carries many small messages instead
+            # of one that has to fit in a single protocol line.
+            streamed: list[str] = []
+
+            def collect(chunk: OutputChunk) -> None:
+                streamed.append(chunk.data)
+                if on_output is not None:
+                    on_output(chunk)
+
             result = await executor.exec(
-                handle, ["sh", "-c", args["command"]], timeout_s=exec_timeout_s
+                handle,
+                ["sh", "-c", args["command"]],
+                timeout_s=exec_timeout_s,
+                on_output=collect,
             )
-            output = f"exit code: {result.exit_code}\n{result.stdout}{result.stderr}"
+            # An executor that streams empties these; one that buffers anyway
+            # leaves them populated. Taking whichever is present avoids both
+            # losing output and printing it twice.
+            body = "".join(streamed) or f"{result.stdout}{result.stderr}"
+            output = f"exit code: {result.exit_code}\n{body}"
             if result.timed_out:
                 output = f"TIMED OUT after {exec_timeout_s}s\n" + output
             return _truncate(output)
