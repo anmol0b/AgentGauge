@@ -114,10 +114,11 @@ jobs:
       # The one test that needs a daemon. It is skipped on laptops, so without
       # this job the Docker executor — the component that actually isolates
       # untrusted agent output — would never be exercised anywhere.
-      # tests/conformance/ runs against both the Python and Rust executors
-      # here: the contract every implementation must satisfy, and the only
-      # place the process, timeout and streaming halves are exercised.
-      - name: Docker integration and conformance tests
+      # Three things only runnable here: tests/conformance/ against both
+      # executors (the contract every implementation must satisfy), the
+      # sandbox integration test, and the real-repo task verification, which
+      # clones upstream repositories and proves each task still holds.
+      - name: Docker integration, conformance and task verification
         run: pytest tests/ -m docker -v -rs
 
   audit:
