@@ -9,6 +9,7 @@ from pathlib import Path
 from jinja2 import Template
 
 from agentbench.models.report import AggregateReport
+from agentbench.reporting.aggregate import comparable_repos
 
 _TEMPLATE = Template(
     """\
@@ -111,6 +112,55 @@ parentheses.</p>
   {% endfor %}
 </table>
 
+{% if report.repos %}
+<h2>Repositories</h2>
+<p class="muted">How well agents work <em>in</em> each codebase, rather than
+how the models compare. A profile, not a single score &mdash; passing often
+while taking thirty tool calls and breaking a neighbour is not the same repo
+as passing often, cheaply and cleanly.</p>
+{% if not comparable %}
+<div class="caveats">
+  <strong>These repositories are not comparable to each other.</strong>
+  They were evaluated with different models, so a difference between them may
+  be the model rather than the codebase. Read each row on its own, or re-run
+  them against the same model set.
+</div>
+{% endif %}
+<table>
+  <tr><th>Repository</th><th>Tasks</th><th>Difficulty</th>
+      <th>Pass rate (95% CI)</th><th>Valid runs</th><th>Harness errors</th>
+      <th>Tool calls</th><th>Tokens in</th><th>Cost (mean)</th>
+      <th>Caused regressions</th><th>Disqualified</th><th>Models</th></tr>
+  {% for r in report.repos %}
+  <tr>
+    <td><strong>{{ r.repo_id }}</strong></td>
+    <td>{{ r.n_tasks }}</td>
+    <td class="muted">
+      {%- if r.difficulty_mix -%}
+        {%- for level, count in r.difficulty_mix.items() -%}
+          {{ count }} {{ level }}{{ ", " if not loop.last }}
+        {%- endfor -%}
+      {%- else -%}—{%- endif -%}
+    </td>
+    <td>{{ rate(r.pass_rate, r.pass_rate_ci) }}</td>
+    <td>{{ r.n_valid }} / {{ r.n_runs }}</td>
+    <td class="{{ 'warn' if r.error_rate else '' }}">{{
+      "%.0f%%" | format(r.error_rate * 100) }}</td>
+    <td>{{ stat(r.tool_calls) }}</td>
+    <td>{{ stat(r.tokens_in, "%.0f") }}</td>
+    {% if r.cost_mean is none %}
+    <td class="muted">unpriced</td>
+    {% else %}
+    <td>${{ "%.4f" | format(r.cost_mean) }}</td>
+    {% endif %}
+    <td class="{{ 'warn' if r.regressed_count else '' }}">{{ r.regressed_count or "—" }}</td>
+    <td class="{{ 'warn' if r.tampered_count else '' }}">{{ r.tampered_count or "—" }}</td>
+    <td class="muted">{{ r.models | join(", ") }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
 {% if report.by_difficulty %}
 <h2>By difficulty</h2>
 <table>
@@ -211,5 +261,13 @@ def render_html(
     report: AggregateReport, out_path: Path | str, concurrency: int | None = None
 ) -> Path:
     out = Path(out_path)
-    out.write_text(_TEMPLATE.render(report=report, concurrency=concurrency))
+    out.write_text(
+        _TEMPLATE.render(
+            report=report,
+            concurrency=concurrency,
+            # the repository table says so rather than ranking things that
+            # cannot be ranked
+            comparable=comparable_repos(report.repos),
+        )
+    )
     return out
