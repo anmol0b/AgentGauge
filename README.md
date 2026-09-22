@@ -139,7 +139,13 @@ conformant when that suite passes against it.
 cd rust && cargo build --release        # build the executor
 cargo test --all && cargo clippy --all-targets -- -D warnings
 cd .. && .venv/bin/pytest tests/conformance   # all implementations
+.venv/bin/python bench/sandbox_bench.py       # compare them
 ```
+
+The Rust executor is 10-40% faster per sandbox operation, which works out to
+roughly 0.2% of a real run — model inference dominates. Its actual value is
+streaming output, guaranteed container cleanup, and headroom at concurrency.
+Measurements and caveats: `docs/BENCHMARKS.md`.
 
 ### Development
 

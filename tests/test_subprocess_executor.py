@@ -176,3 +176,29 @@ async def test_start_sends_the_repo_as_a_tagged_union(stub, closing, tmp_path):
     sent = json.loads(record.read_text())["params"]
     assert sent["repo"] == {"kind": "host_path", "path": "/tmp/r"}
     assert sent["image"] == "img"
+
+
+async def test_a_message_larger_than_64kib_is_read(stub, closing):
+    """asyncio's StreamReader defaults to a 64 KiB line limit and one
+    protocol message is one line. Exceeding it used to kill the reader and
+    hang every later call."""
+    blob = bytes(range(256)) * 2048  # 512 KiB raw, ~683 KiB of base64
+    executor = stub(
+        responses={"read_bytes": {"result": {"content_b64": base64.b64encode(blob).decode()}}}
+    )
+    closing.append(executor)
+
+    assert await executor.read_bytes(HANDLE, "big.bin") == blob
+
+
+async def test_a_broken_stream_fails_later_calls_instead_of_hanging(stub, closing):
+    """Once the reader is gone nothing will ever answer, so saying so beats
+    writing to a process that cannot reply."""
+    executor = stub(exit_immediately=True)
+    closing.append(executor)
+
+    with pytest.raises(ExecutorProtocolError):
+        await executor.teardown(HANDLE)
+    # the second call must fail fast, not wait for a response that cannot come
+    with pytest.raises(ExecutorProtocolError):
+        await executor.teardown(HANDLE)
