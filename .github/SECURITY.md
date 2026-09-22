@@ -1,1 +1,0 @@
-../docs/SECURITY.md
