@@ -1,0 +1,79 @@
+name: Release artifacts
+
+# Builds every distributable and uploads them as artifacts. It does not
+# publish: that needs an account decision (PyPI project, trusted publishing
+# or a token), so the upload step is deliberately left to be added once those
+# exist. Running this on a tag gives a complete, downloadable release set in
+# the meantime.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  executor-wheels:
+    name: executord wheel (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64
+          - runner: ubuntu-latest
+            target: aarch64
+          - runner: macos-14
+            target: aarch64
+          - runner: macos-13
+            target: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          # manylinux is ignored on macOS; on Linux it builds against an old
+          # glibc so the wheel installs on more than the runner's distro.
+          manylinux: auto
+          args: --release --out dist -m rust/crates/agentbench-executord/Cargo.toml
+      - name: Check the binary is in the wheel
+        shell: bash
+        run: |
+          python -m zipfile -l dist/*.whl | grep -q agentbench-executord \
+            || { echo "no binary in the wheel"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: executord-${{ matrix.runner }}-${{ matrix.target }}
+          path: dist/*.whl
+
+  python-sdist:
+    name: agentbench sdist and wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip build
+      - run: python -m build --sdist --wheel --outdir dist .
+      # The Python package must install with no Rust anywhere. If this stops
+      # being true, users on a platform without a wheel lose the tool
+      # entirely rather than falling back to the Python executor.
+      - name: Install the sdist in a clean environment and check the fallback
+        run: |
+          python -m venv /tmp/check
+          /tmp/check/bin/pip install dist/*.tar.gz
+          cd /tmp  # not the repo: cwd on sys.path would import the source tree
+          /tmp/check/bin/python -c "
+          import agentbench
+          from agentbench.sandbox.discovery import find_executor_binary
+          from agentbench.cli import make_executor  # noqa: F401  import must work
+          assert find_executor_binary() is None, 'unexpected binary on this box'
+          print('installed from', agentbench.__file__, 'with no executor binary')
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentbench-python
+          path: dist/*
