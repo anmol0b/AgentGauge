@@ -55,6 +55,14 @@ class SubprocessExecutor:
         self._broken: Exception | None = None
         self.handshake: Handshake | None = None
 
+    def supports(self, capability: str) -> bool:
+        """Whether the executor declared it can do this.
+
+        Only meaningful after the handshake; before that nothing is known, so
+        nothing is claimed.
+        """
+        return self.handshake is not None and capability in self.handshake.capabilities
+
     # --- process lifecycle ------------------------------------------------
 
     async def _ensure_started(self) -> asyncio.subprocess.Process:
@@ -216,15 +224,21 @@ class SubprocessExecutor:
         timeout_s: int,
         on_output: OutputSink | None = None,
     ) -> ExecResult:
+        await self._ensure_started()  # the handshake decides what to ask for
+        # Asking an executor to stream when it said it cannot is how a
+        # capability list becomes decorative. Without streaming the output
+        # still comes back in the result, so the caller loses progress
+        # reporting rather than data.
+        streaming = on_output is not None and self.supports("stream")
         result = await self._call(
             "exec",
             {
                 "handle": handle.model_dump(),
                 "command": command,
                 "timeout_s": timeout_s,
-                "stream": on_output is not None,
+                "stream": streaming,
             },
-            on_output=on_output,
+            on_output=on_output if streaming else None,
             timeout_s=timeout_s + _RESPONSE_GRACE_S,
         )
         return ExecResult(**result)
