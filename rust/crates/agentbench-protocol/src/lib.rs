@@ -56,10 +56,6 @@ pub struct SandboxPolicy {
     pub pids_limit: i64,
     #[serde(default = "default_network_mode")]
     pub network_mode: String,
-    #[serde(default)]
-    pub network_allowlist: Vec<String>,
-    #[serde(default = "default_exec_timeout_s")]
-    pub exec_timeout_s: u64,
 }
 
 fn default_mem_limit() -> String {
@@ -74,9 +70,6 @@ fn default_pids_limit() -> i64 {
 fn default_network_mode() -> String {
     "none".to_string()
 }
-fn default_exec_timeout_s() -> u64 {
-    120
-}
 
 impl Default for SandboxPolicy {
     fn default() -> Self {
@@ -85,8 +78,6 @@ impl Default for SandboxPolicy {
             nano_cpus: default_nano_cpus(),
             pids_limit: default_pids_limit(),
             network_mode: default_network_mode(),
-            network_allowlist: Vec::new(),
-            exec_timeout_s: default_exec_timeout_s(),
         }
     }
 }

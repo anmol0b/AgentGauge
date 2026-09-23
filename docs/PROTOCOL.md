@@ -89,7 +89,7 @@ are for the executor failing, not the sandboxed program.
 {"repo": {"kind": "host_path", "path": "/tmp/x/repo"},
  "image": "agentbench-base:py3.12",
  "policy": {"mem_limit": "2g", "nano_cpus": 1000000000,
-            "pids_limit": 256, "network_mode": "none", "exec_timeout_s": 120}}
+            "pids_limit": 256, "network_mode": "none"}}
 → {"handle": {"id": "…", "workdir": "/repo"}}
 ```
 
