@@ -16,7 +16,12 @@ from typing import Any
 
 import pytest
 
-from agentbench.sandbox.protocol import HostPathRepo, OutputChunk, SandboxHandle
+from agentbench.sandbox.protocol import (
+    PROTOCOL_VERSION,
+    HostPathRepo,
+    OutputChunk,
+    SandboxHandle,
+)
 from agentbench.sandbox.subprocess_executor import ExecutorProtocolError, SubprocessExecutor
 
 HANDLE = SandboxHandle(id="stub")
@@ -202,3 +207,38 @@ async def test_a_broken_stream_fails_later_calls_instead_of_hanging(stub, closin
     # the second call must fail fast, not wait for a response that cannot come
     with pytest.raises(ExecutorProtocolError):
         await executor.teardown(HANDLE)
+
+
+async def test_streaming_is_not_requested_from_an_executor_that_cannot(stub, closing, tmp_path):
+    """A capability list nothing consults is decoration."""
+    record = tmp_path / "sent.json"
+    executor = stub(
+        record_to=str(record),
+        handshake={"protocol_version": PROTOCOL_VERSION, "backend": "stub", "capabilities": []},
+        responses={"exec": EXEC_OK},
+    )
+    closing.append(executor)
+    chunks: list[OutputChunk] = []
+
+    await executor.exec(HANDLE, ["echo"], 30, on_output=chunks.append)
+
+    assert json.loads(record.read_text())["params"]["stream"] is False
+    assert chunks == []  # nothing was streamed, so nothing is claimed to be
+    assert not executor.supports("stream")
+
+
+async def test_streaming_is_requested_when_declared(stub, closing, tmp_path):
+    record = tmp_path / "sent.json"
+    executor = stub(record_to=str(record), responses={"exec": EXEC_OK})
+    closing.append(executor)
+
+    await executor.exec(HANDLE, ["echo"], 30, on_output=lambda _c: None)
+
+    assert json.loads(record.read_text())["params"]["stream"] is True
+    assert executor.supports("stream")
+
+
+async def test_nothing_is_claimed_before_the_handshake(stub, closing):
+    executor = stub()
+    closing.append(executor)
+    assert not executor.supports("stream")  # not started yet

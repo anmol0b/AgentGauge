@@ -1,4 +1,4 @@
-# Sandbox executor protocol v1.0
+# Sandbox executor protocol v2.0
 
 AgentBench runs untrusted, model-generated code inside a sandbox. Everything
 it needs from that sandbox goes through one narrow interface, so the sandbox
@@ -16,15 +16,24 @@ passes against it.
 ## Transport
 
 The executor is a child process. The client writes requests to its **stdin**
-and reads messages from its **stdout**, one JSON object per line (`\n`
-terminated, no embedded newlines).
+and reads messages from its **stdout**. Each message is length-prefixed, as
+in the Language Server Protocol:
 
-**Messages can be large.** One message is one line, and a `read_bytes`
-result carries a whole file as base64. A client reading with a fixed line
-buffer must size it accordingly — asyncio's 64 KiB default is far too small,
-and the Python client raises it to 64 MiB. Treat that as the practical
-ceiling on a single message; a future major version would move to
-length-prefixed framing to remove the cliff entirely.
+```
+Content-Length: 61\r\n
+\r\n
+{"id":1,"method":"teardown","params":{"handle":{"id":"abc"}}}
+```
+
+A header block, a blank line, then exactly that many bytes of UTF-8 JSON.
+Only `Content-Length` is required; unknown headers are ignored.
+
+**Why not one JSON object per line.** A `read_bytes` result carries a whole
+file as base64, so messages get large. A delimiter-based format forces every
+reader to impose a maximum message size, and any such limit is a cliff: in
+v1 a single large file overran asyncio's 64 KiB line buffer, killed the
+reader and hung every later call. A declared length has no ceiling beyond
+memory, and no reader has to be told to raise a limit it did not know about.
 
 **stdout carries protocol messages and nothing else.** An executor that prints
 a log line to stdout corrupts the stream. Diagnostics go to **stderr**, which
@@ -42,6 +51,8 @@ The client refuses a major version it does not know. Capabilities are optional
 features (see below); core operations are always required.
 
 ### Requests and responses
+
+Shown below without their headers, for readability:
 
 ```json
 → {"id": 1, "method": "exec", "params": {…}}
@@ -89,7 +100,7 @@ are for the executor failing, not the sandboxed program.
 {"repo": {"kind": "host_path", "path": "/tmp/x/repo"},
  "image": "agentbench-base:py3.12",
  "policy": {"mem_limit": "2g", "nano_cpus": 1000000000,
-            "pids_limit": 256, "network_mode": "none", "exec_timeout_s": 120}}
+            "pids_limit": 256, "network_mode": "none"}}
 → {"handle": {"id": "…", "workdir": "/repo"}}
 ```
 
@@ -165,14 +176,23 @@ orphaned containers are the failure mode users notice.
 | `stream` | `exec` honours `"stream": true` |
 
 Core operations are not capabilities: an executor that cannot run a command or
-store a file is not an executor. Capabilities exist so the conformance suite
-can skip optional behaviour rather than let it pass untested.
+store a file is not an executor.
+
+**The client honours what you declare.** An executor that omits `stream` is
+never sent `"stream": true` and never has a sink attached to its output, so
+declaring honestly costs nothing. The conformance suite likewise skips the
+tests for a capability you do not claim, rather than letting them pass
+untested.
 
 ## Versioning
 
 `protocol_version` is `MAJOR.MINOR`. Adding an optional field, a method, or a
 capability bumps MINOR. Removing or retyping anything bumps MAJOR. A client
 accepts any MINOR within a MAJOR it knows.
+
+**2.0** replaced newline-delimited framing with the length-prefixed framing
+above, and dropped two policy fields (`network_allowlist`, `exec_timeout_s`)
+that no implementation honoured. Nothing had been released at 1.0.
 
 ## Writing an executor
 
