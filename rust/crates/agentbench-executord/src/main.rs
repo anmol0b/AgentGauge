@@ -18,7 +18,7 @@ use agentbench_protocol::{
 use agentbench_sandbox::{DockerBackend, SandboxError};
 use base64::Engine as _;
 use clap::Parser;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, Mutex};
 
 #[derive(Parser)]
@@ -34,22 +34,59 @@ struct Cli {
 struct Out(Mutex<tokio::io::Stdout>);
 
 impl Out {
+    /// Write one length-prefixed message, as in LSP.
+    ///
+    /// A delimiter-based format makes every reader impose a maximum message
+    /// size, and any such limit is a cliff — one large file used to overrun
+    /// the client's line buffer and hang it. A declared length has no ceiling
+    /// beyond memory.
     async fn send(&self, value: &impl serde::Serialize) {
-        let mut line = match serde_json::to_vec(value) {
-            Ok(line) => line,
+        let payload = match serde_json::to_vec(value) {
+            Ok(payload) => payload,
             Err(err) => {
                 tracing::error!(%err, "failed to serialize a protocol message");
                 return;
             }
         };
-        line.push(b'\n');
+        let header = format!("Content-Length: {}\r\n\r\n", payload.len());
         let mut stdout = self.0.lock().await;
-        if let Err(err) = stdout.write_all(&line).await {
+        if let Err(err) = stdout.write_all(header.as_bytes()).await {
+            tracing::error!(%err, "failed to write to stdout");
+            return;
+        }
+        if let Err(err) = stdout.write_all(&payload).await {
             tracing::error!(%err, "failed to write to stdout");
             return;
         }
         let _ = stdout.flush().await;
     }
+}
+
+/// Read one framed message, or None at end of stream.
+async fn read_message<R: AsyncBufRead + Unpin>(reader: &mut R) -> anyhow::Result<Option<Vec<u8>>> {
+    let mut length: Option<usize> = None;
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line).await? == 0 {
+            return Ok(None);
+        }
+        let header = line.trim_end_matches(['\r', '\n']);
+        if header.is_empty() {
+            break; // blank line ends the headers
+        }
+        if let Some((name, value)) = header.split_once(':') {
+            if name.trim().eq_ignore_ascii_case("content-length") {
+                length = value.trim().parse().ok();
+            }
+        }
+    }
+
+    let Some(length) = length else {
+        anyhow::bail!("a message arrived with no Content-Length header");
+    };
+    let mut payload = vec![0u8; length];
+    reader.read_exact(&mut payload).await?;
+    Ok(Some(payload))
 }
 
 #[tokio::main]
@@ -113,14 +150,11 @@ async fn shutdown_signal() {
 }
 
 async fn serve(backend: Arc<DockerBackend>, out: Arc<Out>) -> anyhow::Result<()> {
-    let mut lines = BufReader::new(tokio::io::stdin()).lines();
+    let mut reader = BufReader::new(tokio::io::stdin());
     let mut inflight = tokio::task::JoinSet::new();
 
-    while let Some(line) = lines.next_line().await? {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let request: Request = match serde_json::from_str(&line) {
+    while let Some(payload) = read_message(&mut reader).await? {
+        let request: Request = match serde_json::from_slice(&payload) {
             Ok(request) => request,
             Err(err) => {
                 // No id to answer with, so this can only be logged.

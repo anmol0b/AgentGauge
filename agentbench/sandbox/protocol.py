@@ -20,10 +20,11 @@ from pydantic import BaseModel
 
 from agentbench.sandbox.policy import SandboxPolicy
 
+# 2.0 replaced newline-delimited framing with length-prefixed framing.
 # Bumped when a change would break an executor built against the old shape.
 # Additive, optional fields do not require a bump; removing or retyping one
 # does. The client refuses a handshake whose major version it does not know.
-PROTOCOL_VERSION = "1.0"
+PROTOCOL_VERSION = "2.0"
 
 
 class SandboxHandle(BaseModel):

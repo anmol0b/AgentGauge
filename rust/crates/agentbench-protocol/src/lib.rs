@@ -7,8 +7,9 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 2.0 replaced newline-delimited framing with length-prefixed framing.
 /// Bumped when a change would break an executor built against the old shape.
-pub const PROTOCOL_VERSION: &str = "1.0";
+pub const PROTOCOL_VERSION: &str = "2.0";
 
 fn default_workdir() -> String {
     "/repo".to_string()

@@ -39,6 +39,14 @@ Nothing has been released yet. 0.1.0 will be the first tag.
   a coverage floor, the Docker sandbox, Rust lint and tests, dependency audit.
 - `docs/SECURITY.md`, `CONTRIBUTING.md`, issue and pull request templates.
 
+### Changed
+
+- **Executor protocol 2.0.** Length-prefixed framing replaces one-JSON-object-
+  per-line, removing the maximum message size a delimiter-based format forces
+  on every reader. The client now honours the capabilities an executor
+  declares instead of requesting streaming regardless. `network_allowlist` and
+  `exec_timeout_s` are gone from `SandboxPolicy` — nothing honoured either.
+
 ### Changed — how results are reported
 
 These change what the numbers mean, not just how they look:

@@ -31,11 +31,6 @@ _HANDSHAKE_TIMEOUT_S = 30
 # Slack on top of the command's own deadline. The executor enforces the
 # timeout itself; this only catches an executor that has stopped responding.
 _RESPONSE_GRACE_S = 60
-# asyncio's StreamReader defaults to a 64 KiB line limit, and a protocol
-# message is one line. That is far too small: reading a 64 KB file is ~87 KB
-# of base64, and a test run's output is routinely larger. Exceeding the limit
-# raises inside the reader, which used to leave every later call hanging.
-_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
 
 
 class ExecutorProtocolError(RuntimeError):
@@ -75,7 +70,6 @@ class SubprocessExecutor:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 # stderr stays on ours: the executor logs there by contract
-                limit=_MAX_MESSAGE_BYTES,
             )
             self._process = process
             # Read the handshake before the reader task exists: two
@@ -88,15 +82,17 @@ class SubprocessExecutor:
     async def _handshake(self, process: asyncio.subprocess.Process) -> None:
         assert process.stdout is not None
         try:
-            line = await asyncio.wait_for(process.stdout.readline(), timeout=_HANDSHAKE_TIMEOUT_S)
+            message = await asyncio.wait_for(
+                _read_message(process.stdout), timeout=_HANDSHAKE_TIMEOUT_S
+            )
         except TimeoutError as exc:
             raise ExecutorProtocolError(
                 f"{self._binary} sent no handshake within {_HANDSHAKE_TIMEOUT_S}s"
             ) from exc
-        if not line:
+        if message is None:
             raise ExecutorProtocolError(f"{self._binary} exited before the handshake")
 
-        handshake = Handshake(**json.loads(line))
+        handshake = Handshake(**message)
         theirs = handshake.protocol_version.split(".")[0]
         ours = PROTOCOL_VERSION.split(".")[0]
         if theirs != ours:
@@ -111,10 +107,10 @@ class SubprocessExecutor:
         reason = ExecutorProtocolError(f"{self._binary} exited unexpectedly")
         try:
             while True:
-                line = await process.stdout.readline()
-                if not line:
+                message = await _read_message(process.stdout)
+                if message is None:
                     break
-                self._dispatch(json.loads(line))
+                self._dispatch(message)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # an unreadable stream, not a failed command
@@ -189,9 +185,8 @@ class SubprocessExecutor:
         if on_output is not None:
             self._sinks[request_id] = on_output
 
-        payload = json.dumps({"id": request_id, "method": method, "params": params})
         try:
-            process.stdin.write(payload.encode() + b"\n")
+            process.stdin.write(_frame({"id": request_id, "method": method, "params": params}))
             await process.stdin.drain()
             if timeout_s is None:
                 return await future
@@ -265,6 +260,39 @@ class SubprocessExecutor:
 
     async def teardown(self, handle: SandboxHandle) -> None:
         await self._call("teardown", {"handle": handle.model_dump()})
+
+
+def _frame(message: dict[str, Any]) -> bytes:
+    """Length-prefixed framing, as in LSP.
+
+    A delimiter-based format makes every reader impose a maximum message
+    size, and any such limit is a cliff: reading one large file used to
+    overrun asyncio's line buffer and hang the client. A declared length has
+    no ceiling beyond memory.
+    """
+    payload = json.dumps(message).encode()
+    return f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii") + payload
+
+
+async def _read_message(stream: asyncio.StreamReader) -> dict[str, Any] | None:
+    """Read one framed message, or None at end of stream."""
+    length: int | None = None
+    while True:
+        line = await stream.readline()
+        if not line:
+            return None
+        header = line.strip()
+        if not header:
+            break  # blank line ends the headers
+        name, _, value = header.decode("ascii", errors="replace").partition(":")
+        if name.strip().lower() == "content-length":
+            length = int(value.strip())
+
+    if length is None:
+        raise ExecutorProtocolError("a message arrived with no Content-Length header")
+    # readexactly, unlike readline, has no buffer limit to overrun
+    message: dict[str, Any] = json.loads(await stream.readexactly(length))
+    return message
 
 
 def _as_exception(error: dict[str, Any]) -> Exception:
