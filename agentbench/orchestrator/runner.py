@@ -8,7 +8,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from agentbench.agent_loop.loop import DEFAULT_SYSTEM_PROMPT, run_agent_loop
-from agentbench.models.run import RunResult
+from agentbench.agent_loop.transcript import compact_transcript
+from agentbench.models.run import RunResult, Transcript
 from agentbench.models.task import Task
 from agentbench.providers import make_provider
 from agentbench.providers.base import ModelProvider
@@ -43,6 +44,7 @@ async def run_once(
     diff = ""
     error: str | None = None
     stop_reason: str | None = None
+    transcript: Transcript | None = None
     passed = False
     regressions: list[str] | None = None
     tampered: list[str] | None = None
@@ -79,6 +81,9 @@ async def run_once(
             cost = loop_result.cost_usd
             tool_call_count = loop_result.tool_call_count
             stop_reason = loop_result.stop_reason
+            # recorded here, not after grading: a run that fails later still
+            # has a record of what the agent did
+            transcript = compact_transcript(loop_result.messages)
             agent_s = time.monotonic() - agent_started
 
             grading_started = time.monotonic()
@@ -138,6 +143,7 @@ async def run_once(
         regressions=regressions,
         error=error,
         stop_reason=stop_reason,
+        transcript=transcript,
         tampered_tests=tampered,
     )
 
