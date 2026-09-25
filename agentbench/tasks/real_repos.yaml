@@ -5,8 +5,12 @@
 # in: a failing test describing a real bug, and the rest of the code untouched.
 #
 # Construction, for adding more:
-#   1. Find a commit that fixed a bug and changed tests alongside source.
-#   2. repo_ref = its parent — where the bug is still present.
+#   1. Find the *merge commit* of the PR that fixed a bug and changed tests
+#      alongside source. Prefer the merge over any single commit inside the
+#      PR: an intermediate commit on the branch is usually a partial fix, and
+#      a task built on one is unsolvable even though it looks fine.
+#   2. repo_ref = the merge's FIRST parent — the default branch before the PR,
+#      where the bug is still present.
 #   3. setup_commands restores the fix's test file with `git checkout <fix>
 #      -- <test path>`. This works offline: the sandbox has no network, but
 #      the clone happens host-side and carries the whole object store, so the
@@ -40,15 +44,20 @@ tasks:
 
   # BarrelList deleted a slice spanning several barrels in the wrong order:
   # removing the intermediate barrels first invalidates the index used for
-  # the start barrel. The fix is a two-line reorder, and finding it means
-  # understanding what the indices refer to rather than reading the diff.
+  # the start barrel. Finding it means understanding what the indices refer
+  # to rather than reading the diff.
+  #
+  # Pinned to PR #472's merge and its first parent. It was first built on
+  # 91b2bb47ae, a commit *inside* that PR, which is a partial fix —
+  # listutils.py changes by another 46 lines before the merge — so applying
+  # it did not make the test pass and the task was unsolvable.
   - id: boltons-barrellist-cross-barrel-delete
     repo_url: https://github.com/mahmoud/boltons.git
     repo_id: boltons
-    repo_ref: 967864f89791509f9eb36b22b4579d36b72a6df2
-    fix_ref: 91b2bb47ae9b22953f61c17c20860bcb7dd1d6b1
+    repo_ref: 56161fec0ac7a1e5ba0577cc33c20bbdbb331728
+    fix_ref: 574393a4c349d5b81ee328a9e450c34dd0614635
     setup_commands:
-      - "git checkout 91b2bb47ae9b22953f61c17c20860bcb7dd1d6b1 -- tests/test_listutils.py"
+      - "git checkout 574393a4c349d5b81ee328a9e450c34dd0614635 -- tests/test_listutils.py"
     failing_test_command: "pytest tests/test_listutils.py::test_barrellist_delete_across_multiple_barrels"
     full_test_command: "pytest tests/"
     difficulty: hard

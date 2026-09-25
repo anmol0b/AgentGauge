@@ -73,6 +73,10 @@ These change what the numbers mean, not just how they look:
 
 ### Fixed
 
+- The sandbox base image is pinned by digest and its pytest by version.
+  `python:3.12-slim` is a moving tag, so the environment a task ran in drifted
+  between builds — which makes an old run and a new one incomparable.
+
 - Streamed output was implemented through the protocol and both executors but
   never wired to the tool that runs tests, so a long test run still showed
   nothing until it finished. The harness now prints a throttled progress line
