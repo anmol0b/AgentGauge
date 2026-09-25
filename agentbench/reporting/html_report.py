@@ -28,6 +28,14 @@ _TEMPLATE = Template(
   .ci { color: #666; font-weight: 400; font-size: 0.9em; }
   details { margin-bottom: 1rem; }
   pre { background: #f8f8f8; padding: 1rem; overflow-x: auto; }
+  .turns { padding-left: 1.6rem; }
+  .turns > li { margin-bottom: 1rem; }
+  .turns pre { margin: 0.3rem 0; max-height: 14rem; overflow: auto; font-size: 0.85em; }
+  .call { border-left: 3px solid #ddd; padding-left: 0.75rem; margin: 0.5rem 0; }
+  code.tool { background: #eef3fb; padding: 1px 5px; font-weight: 600; }
+  code.arg { background: #f4f4f4; padding: 1px 5px; margin-left: 0.25rem;
+             font-size: 0.85em; }
+  h4 { margin: 1rem 0 0.3rem; }
   .caveats { background: #fffbea; border: 1px solid #e8d48b; padding: 0.5rem 1rem;
              margin-bottom: 2rem; }
   .caveats li { margin: 0.35rem 0; }
@@ -57,6 +65,10 @@ _TEMPLATE = Template(
   <li><strong>Regressions are detected from a junit report</strong>, which needs
       a pytest-compatible suite. Where that report is missing or unparseable the
       run reads &ldquo;not detected&rdquo; &mdash; not &ldquo;none&rdquo;.</li>
+  <li><strong>Transcripts are abbreviated.</strong> Assistant text, tool
+      arguments and tool output are each clipped, and long runs have turns
+      dropped from the middle. Every clip states the size or count it came
+      from, so nothing is hidden silently.</li>
   {% if concurrency %}
   <li><strong>Latency is not a clean measurement.</strong> Runs executed
       {{ concurrency }}-way concurrently against resource-capped containers, so
@@ -242,12 +254,53 @@ as passing often, cheaply and cleanly.</p>
   {% endfor %}
 </table>
 
-<h2>Diffs</h2>
+<h2>What the agent did</h2>
+<p class="muted">One entry per run: the turns it took, then the diff it left.
+Transcripts are abbreviated &mdash; every clip states the size it came from.</p>
 {% for r in report.runs %}
 <details>
   <summary>{{ r.task_id }} | {{ r.model }} | run {{ r.run_index + 1 }}
     ({{ "errored" if r.error else "passed" if r.passed else "failed" }}{{
        ", disqualified: edited tests" if r.tampered_tests else "" }})</summary>
+
+  {% if r.transcript is none %}
+  <p class="muted">Transcript not recorded &mdash; this run predates it, or it
+    errored before the agent started.</p>
+  {% elif not r.transcript.turns %}
+  <p class="muted">No turns recorded.</p>
+  {% else %}
+  {% if r.transcript.elided_turns %}
+  <p class="warn">{{ r.transcript.total_turns }} turns in total;
+    {{ r.transcript.elided_turns }} dropped from the middle to fit the size
+    budget. The first and last turns are kept.</p>
+  {% endif %}
+  <ol class="turns">
+    {% for turn in r.transcript.turns %}
+    <li value="{{ turn.index }}">
+      {% if turn.text %}<p>{{ turn.text }}</p>{% endif %}
+      {% for call in turn.tool_calls %}
+      <div class="call">
+        <code class="tool">{{ call.name }}</code>
+        {% for key, value in call.arguments.items() %}
+        <code class="arg">{{ key }}={{ value }}</code>
+        {% endfor %}
+        {% if call.output_excerpt %}
+        <pre>{{ call.output_excerpt }}</pre>
+        {% endif %}
+        {% if call.output_chars > call.output_excerpt | length %}
+        <span class="muted">{{ call.output_chars }} chars of output</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% if turn.nudged %}
+      <p class="warn">Nudged: stopped without editing anything.</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+
+  <h4>Diff</h4>
   <pre>{{ r.diff or "(no changes)" }}</pre>
 </details>
 {% endfor %}

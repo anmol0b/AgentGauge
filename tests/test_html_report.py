@@ -131,3 +131,98 @@ def test_difficulty_mix_is_readable(tmp_path):
     html = render_html(aggregate(runs), tmp_path / "r.html").read_text()
     assert "1 easy, 2 hard" in html
     assert "&amp;times;" not in html
+
+
+def _transcript(**overrides):
+    from agentbench.models.run import ToolCallRecord, Transcript, TurnRecord
+
+    base: dict[str, Any] = dict(
+        turns=[
+            TurnRecord(
+                index=1,
+                text="Reading the file.",
+                tool_calls=[
+                    ToolCallRecord(
+                        name="read_file",
+                        arguments={"path": "calc.py"},
+                        output_excerpt="def subtract(a, b):",
+                        output_chars=4200,
+                    )
+                ],
+            )
+        ],
+        total_turns=1,
+    )
+    return Transcript(**(base | overrides))
+
+
+def test_report_shows_what_the_agent_did(tmp_path):
+    html = render_html(aggregate([_run(transcript=_transcript())]), tmp_path / "r.html").read_text()
+
+    assert "<h2>What the agent did</h2>" in html
+    assert "read_file" in html
+    assert "path=calc.py" in html
+    assert "Reading the file." in html
+
+
+def test_report_states_the_true_output_size_beside_an_excerpt(tmp_path):
+    """The excerpt is 19 chars of a 4200-char result; hiding that would make
+    the excerpt look like the whole thing."""
+    html = render_html(aggregate([_run(transcript=_transcript())]), tmp_path / "r.html").read_text()
+    assert "4200 chars of output" in html
+
+
+def test_report_says_how_many_turns_were_dropped(tmp_path):
+    html = render_html(
+        aggregate([_run(transcript=_transcript(total_turns=40, elided_turns=34))]),
+        tmp_path / "r.html",
+    ).read_text()
+
+    assert "40 turns in total" in html
+    assert "34 dropped from the middle" in html
+
+
+def test_report_distinguishes_not_recorded_from_empty(tmp_path):
+    from agentbench.models.run import Transcript
+
+    missing = render_html(aggregate([_run(transcript=None)]), tmp_path / "a.html").read_text()
+    empty = render_html(aggregate([_run(transcript=Transcript())]), tmp_path / "b.html").read_text()
+
+    assert "Transcript not recorded" in missing
+    assert "No turns recorded" in empty
+    assert "Transcript not recorded" not in empty
+
+
+def test_a_nudged_turn_is_flagged(tmp_path):
+    from agentbench.models.run import TurnRecord
+
+    transcript = _transcript(turns=[TurnRecord(index=1, text="The fix is…", nudged=True)])
+    html = render_html(aggregate([_run(transcript=transcript)]), tmp_path / "r.html").read_text()
+
+    assert "Nudged" in html
+
+
+def test_transcript_content_is_escaped(tmp_path):
+    """Every string in a transcript was written by the model under test."""
+    from agentbench.models.run import ToolCallRecord, TurnRecord
+
+    transcript = _transcript(
+        turns=[
+            TurnRecord(
+                index=1,
+                text="</pre><script>alert(1)</script>",
+                tool_calls=[
+                    ToolCallRecord(
+                        name="run_tests",
+                        arguments={"command": "<img onerror=x>"},
+                        output_excerpt="</pre><script>alert(2)</script>",
+                        output_chars=30,
+                    )
+                ],
+            )
+        ]
+    )
+    html = render_html(aggregate([_run(transcript=transcript)]), tmp_path / "r.html").read_text()
+
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html

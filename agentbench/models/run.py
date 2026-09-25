@@ -16,6 +16,38 @@ class TokenUsage(BaseModel):
         return self.tokens_in + self.cache_write_tokens + self.cache_read_tokens
 
 
+class ToolCallRecord(BaseModel):
+    """One tool call and what it returned, abbreviated."""
+
+    name: str
+    # rendered and clipped, not replayable: this is a record of what happened
+    arguments: dict[str, str]
+    output_excerpt: str
+    output_chars: int  # true length, so clipping is never silent
+
+
+class TurnRecord(BaseModel):
+    index: int  # 1-based
+    text: str  # the assistant's prose, clipped
+    # The loop nudges a model that stops without editing anything. Knowing it
+    # was prodded explains a run that otherwise looks merely slow.
+    nudged: bool = False
+    tool_calls: list[ToolCallRecord] = []
+
+
+class Transcript(BaseModel):
+    """What the agent did, small enough to keep for every run.
+
+    Full transcripts are far too large to store for every run: tool output is
+    capped at 30k chars and a run can take 25 turns. Everything here is
+    clipped, and every clip records the true size it came from.
+    """
+
+    turns: list[TurnRecord] = []
+    total_turns: int = 0  # before any elision
+    elided_turns: int = 0  # dropped from the middle to fit the size budget
+
+
 class RunResult(BaseModel):
     task_id: str
     # denormalized from Task so the database is self-describing:
@@ -54,3 +86,6 @@ class RunResult(BaseModel):
     tampered_tests: list[str] | None = None
     # which CLI invocation produced this run; "" for pre-existing rows
     run_set_id: str = ""
+    # What the agent did. None means not recorded — every pre-v3 row — which
+    # is not the same as an empty transcript.
+    transcript: Transcript | None = None

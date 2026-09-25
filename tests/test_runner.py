@@ -315,3 +315,29 @@ async def test_phases_after_a_failure_stay_zero(tmp_path, monkeypatch):
     assert result.error is not None
     assert result.setup_s > 0.0  # setup completed
     assert result.agent_s == 0.0 and result.grading_s == 0.0
+
+
+async def test_run_once_records_what_the_agent_did(tmp_path):
+    """The transcript is the only record of *how* a run reached its result."""
+    result = await run_once(
+        _task(tmp_path), 0, "fake-model", ScriptedExecutor(), provider=OneEditProvider()
+    )
+
+    assert result.error is None
+    assert result.transcript is not None
+    assert result.transcript.total_turns >= 1
+    names = [call.name for turn in result.transcript.turns for call in turn.tool_calls]
+    assert "write_file" in names  # the edit the provider made is on the record
+
+
+async def test_a_run_that_errors_before_the_loop_has_no_transcript(tmp_path, monkeypatch):
+    """None means not recorded, which is the truth here."""
+
+    def explode(model, system=None):
+        raise RuntimeError("no api key")
+
+    monkeypatch.setattr("agentbench.orchestrator.runner.make_provider", explode)
+    result = await run_once(_task(tmp_path), 0, "fake-model", ScriptedExecutor())
+
+    assert result.error is not None
+    assert result.transcript is None

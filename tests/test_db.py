@@ -150,3 +150,78 @@ def test_v1_rows_get_zero_phase_timings(tmp_path):
     store.close()
     assert runs[0].latency_s == 9.9
     assert (runs[0].setup_s, runs[0].agent_s, runs[0].grading_s) == (0.0, 0.0, 0.0)
+
+
+def test_transcript_round_trips(tmp_path):
+    from agentbench.models.run import ToolCallRecord, Transcript, TurnRecord
+
+    transcript = Transcript(
+        turns=[
+            TurnRecord(
+                index=1,
+                text="Reading the file.",
+                nudged=True,
+                tool_calls=[
+                    ToolCallRecord(
+                        name="read_file",
+                        arguments={"path": "calc.py"},
+                        output_excerpt="def subtract(a, b):",
+                        output_chars=4200,
+                    )
+                ],
+            )
+        ],
+        total_turns=9,
+        elided_turns=3,
+    )
+
+    store = RunStore(tmp_path / "runs.db")
+    store.insert(_result(transcript=transcript))
+    stored = store.all_runs()[0].transcript
+    store.close()
+
+    assert stored == transcript
+    assert stored.turns[0].tool_calls[0].output_chars == 4200  # survives the trip
+    assert stored.elided_turns == 3
+
+
+def test_a_run_with_no_transcript_reads_back_as_not_recorded(tmp_path):
+    """None is "not recorded" — an errored run, or any row from before this
+    existed. Not the same as a transcript with no turns."""
+    store = RunStore(tmp_path / "runs.db")
+    store.insert(_result(transcript=None))
+    stored = store.all_runs()[0].transcript
+    store.close()
+
+    assert stored is None
+
+
+def test_v1_rows_have_no_transcript(tmp_path):
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        """CREATE TABLE runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            task_id TEXT NOT NULL, run_index INTEGER NOT NULL, model TEXT NOT NULL,
+            passed INTEGER NOT NULL, tokens_in INTEGER NOT NULL,
+            tokens_out INTEGER NOT NULL, cost_usd REAL NOT NULL,
+            latency_s REAL NOT NULL, tool_call_count INTEGER NOT NULL,
+            diff TEXT NOT NULL, regressions TEXT NOT NULL, error TEXT)"""
+    )
+    conn.execute(
+        "INSERT INTO runs (task_id, run_index, model, passed, tokens_in, tokens_out,"
+        " cost_usd, latency_s, tool_call_count, diff, regressions, error)"
+        " VALUES ('old', 0, 'm', 1, 1, 1, 0.0, 9.9, 1, '', '[]', NULL)"
+    )
+    conn.commit()
+    conn.close()
+
+    store = RunStore(path)
+    runs = store.all_runs()
+    store.insert(_result())  # still writable after the migration
+    total = len(store.all_runs())
+    store.close()
+
+    assert runs[0].transcript is None
+    assert total == 2

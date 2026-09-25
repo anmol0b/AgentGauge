@@ -4,7 +4,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from agentbench.models.run import RunResult
+from agentbench.models.run import RunResult, Transcript
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS runs (
     regressions TEXT,
     error TEXT,
     stop_reason TEXT,
-    tampered_tests TEXT
+    tampered_tests TEXT,
+    transcript TEXT
 );
 """
 
@@ -40,6 +41,7 @@ _MIGRATIONS = {
     "run_set_id": "TEXT NOT NULL DEFAULT ''",
     "stop_reason": "TEXT",
     "tampered_tests": "TEXT",
+    "transcript": "TEXT",
     "repo_id": "TEXT",
     "difficulty": "TEXT",
     "setup_s": "REAL NOT NULL DEFAULT 0",
@@ -50,7 +52,8 @@ _MIGRATIONS = {
 _COLUMNS = (
     "task_id, run_index, model, passed, tokens_in, tokens_out, cost_usd, "
     "latency_s, tool_call_count, diff, regressions, error, stop_reason, "
-    "tampered_tests, run_set_id, repo_id, difficulty, setup_s, agent_s, grading_s"
+    "tampered_tests, run_set_id, repo_id, difficulty, setup_s, agent_s, grading_s, "
+    "transcript"
 )
 
 
@@ -93,7 +96,7 @@ class RunStore:
     def insert(self, result: RunResult, run_set_id: str = "") -> None:
         self._conn.execute(
             f"INSERT INTO runs ({_COLUMNS}) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 result.task_id,
                 result.run_index,
@@ -115,6 +118,7 @@ class RunStore:
                 result.setup_s,
                 result.agent_s,
                 result.grading_s,
+                result.transcript.model_dump_json() if result.transcript else None,
             ),
         )
         self._conn.commit()
@@ -160,6 +164,7 @@ class RunStore:
                 setup_s=r[17],
                 agent_s=r[18],
                 grading_s=r[19],
+                transcript=Transcript(**json.loads(r[20])) if r[20] is not None else None,
             )
             for r in rows
         ]

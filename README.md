@@ -102,6 +102,9 @@ weak model looks hostile to agents when the difference is the model.
   Runs that touch test files are recorded and never counted as passing.
 - **Every run records why the agent stopped** (`end_turn`, `max_turns`,
   `max_tokens`), so a failure can be attributed rather than guessed at.
+- **Every run records what the agent did** — turns, tool calls, result
+  excerpts, and whether it had to be nudged. Abbreviated so it can be kept for
+  every run; each clip states the size it came from.
 - **Regressions come from a junit report**, which needs a pytest-compatible suite.
   Where it is missing or unparseable, runs read "not detected", not "none".
 

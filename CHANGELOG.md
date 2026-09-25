@@ -34,6 +34,11 @@ Nothing has been released yet. 0.1.0 will be the first tag.
   well agents work *in a codebase* and not only which model is better. A
   profile rather than a single score, and repositories evaluated against
   different models are explicitly not compared.
+- **A record of what the agent did.** Every run stores an abbreviated
+  transcript: the turns taken, each tool call with its arguments, an excerpt
+  of each result, and whether the model had to be nudged. Previously a failed
+  run was explainable only by its diff and stop reason. Clipped to stay
+  storable for every run, and every clip states the size it came from.
 - Per-run phase timings (`setup_s`, `agent_s`, `grading_s`).
 - A strict CI suite: lint, format, `mypy --strict`, a Python version matrix,
   a coverage floor, the Docker sandbox, Rust lint and tests, dependency audit.
