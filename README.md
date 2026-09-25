@@ -41,6 +41,10 @@ docker build -t agentbench-base:py3.12 -f docker/base.Dockerfile docker/
 Sandboxed containers run with `network_mode=none` (the agent loop calls model APIs
 from the host), so test dependencies must be baked into the image.
 
+The base image is pinned by digest and its pytest by version. A benchmark whose
+sandbox drifts cannot compare a run against an older one — `docker/base.Dockerfile`
+says how to update the pin deliberately.
+
 ### Models
 
 - Anthropic: `export ANTHROPIC_API_KEY=...`, use `--model claude-sonnet-5`
