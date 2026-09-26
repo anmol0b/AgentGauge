@@ -42,6 +42,9 @@ quietly repaired one would turn a benchmark task into a free pass.
 
 ## The shape of the codebase
 
+`docs/WALKTHROUGH.md` traces a single run from the CLI to the report and is the
+fastest way to find where a change belongs. The short version:
+
 Two seams carry most of the design:
 
 - **`SandboxExecutor`** (`agentbench/sandbox/executor.py`) is the only way

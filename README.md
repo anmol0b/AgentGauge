@@ -188,6 +188,17 @@ roughly 0.2% of a real run — model inference dominates. Its actual value is
 streaming output, guaranteed container cleanup, and headroom at concurrency.
 Measurements and caveats: `docs/BENCHMARKS.md`.
 
+### Documentation
+
+| | |
+|---|---|
+| `docs/WALKTHROUGH.md` | How it fits together — one run, start to finish |
+| `docs/ROADMAP.md` | What's left for v1, and what is deliberately not |
+| `docs/PROTOCOL.md` | The sandbox executor wire protocol |
+| `docs/SECURITY.md` | Trust boundaries, including the weak ones |
+| `docs/BENCHMARKS.md` | Executor measurements and their caveats |
+| `CONTRIBUTING.md` | Setup, and the decisions worth not undoing |
+
 ### Development
 
 ```sh
