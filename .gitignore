@@ -9,6 +9,10 @@ __pycache__/
 coverage.xml
 htmlcov/
 
+# python -m build / maturin output
+build/
+dist/
+
 # rust build artifacts (Cargo.lock IS committed: this ships a binary)
 rust/target/
 .DS_Store
