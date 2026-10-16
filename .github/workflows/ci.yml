@@ -16,13 +16,38 @@ permissions:
 env:
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  # agentbench-ai depends on the agentbench-executord wheel. Installing it
+  # from this run's own build rather than PyPI means CI tests the branch's
+  # executor, and works for a version that has not been released yet.
+  PIP_FIND_LINKS: wheels
 
 jobs:
-  lint:
-    name: Lint and format
+  executor-wheel:
+    name: Executor wheel
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          manylinux: auto
+          sccache: true
+          args: --release --out wheels -m rust/crates/agentbench-executord/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: executor-wheel
+          path: wheels/*.whl
+          retention-days: 1
+
+  lint:
+    name: Lint and format
+    needs: executor-wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: executor-wheel
+          path: wheels
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -36,9 +61,14 @@ jobs:
 
   types:
     name: Type check
+    needs: executor-wheel
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: executor-wheel
+          path: wheels
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -50,6 +80,7 @@ jobs:
 
   test:
     name: Tests (py${{ matrix.python-version }})
+    needs: executor-wheel
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -57,6 +88,10 @@ jobs:
         python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: executor-wheel
+          path: wheels
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -88,9 +123,14 @@ jobs:
 
   sandbox:
     name: Docker sandbox
+    needs: executor-wheel
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: executor-wheel
+          path: wheels
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -123,9 +163,14 @@ jobs:
 
   audit:
     name: Dependency audit
+    needs: executor-wheel
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: executor-wheel
+          path: wheels
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
