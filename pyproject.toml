@@ -1,9 +1,22 @@
 [project]
-name = "agentbench"
+# "agentbench" is taken on PyPI, and the product may be renamed. This is the
+# only place the distribution name lives: the command, the import package and
+# the binary are all still "agentbench". A rename publishes the new name and
+# then a last release of this one that depends on it.
+name = "agentbench-ai"
+# Must match rust/Cargo.toml and the release tag; release.yml checks all three.
 version = "0.1.0"
 description = "AI-friendliness benchmark: run coding agents against real repo tasks in Docker sandboxes"
+readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "pydantic>=2.6",
     "docker>=7.0",
@@ -11,6 +24,13 @@ dependencies = [
     "openai>=1.40",
     "jinja2>=3.1",
     "pyyaml>=6.0",
+    # The Rust executor, as a binary-only wheel. Wheels exist for macOS and
+    # Linux only, and none of it is needed elsewhere: without it the Python
+    # executor is used. The range follows the executor protocol rather than
+    # pinning exactly — the handshake refuses a major version it doesn't know,
+    # and an exact pin would break every dev install between a version bump
+    # and its release.
+    "agentbench-executord>=0.1,<0.2; sys_platform == 'darwin' or sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +42,10 @@ dev = [
     "mypy>=1.11",
     "types-PyYAML",
 ]
+
+[project.urls]
+Repository = "https://github.com/anmol0b/PersonaFit"
+Changelog = "https://github.com/anmol0b/PersonaFit/blob/main/CHANGELOG.md"
 
 [project.scripts]
 agentbench = "agentbench.cli:main"

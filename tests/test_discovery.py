@@ -5,6 +5,7 @@ binary and falls back to the Python Docker executor.
 """
 
 import stat
+from pathlib import Path
 
 import pytest
 
@@ -29,6 +30,39 @@ def test_a_wrong_explicit_path_is_an_error_not_a_fallback(tmp_path, monkeypatch)
     monkeypatch.setenv("AGENTBENCH_EXECUTOR", str(tmp_path / "missing"))
     with pytest.raises(FileNotFoundError, match="AGENTBENCH_EXECUTOR"):
         find_executor_binary()
+
+
+def test_finds_the_wheel_install_without_an_activated_venv(tmp_path, monkeypatch):
+    """`.venv/bin/agentbench` run directly has the venv's bin off PATH."""
+    monkeypatch.delenv("AGENTBENCH_EXECUTOR", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    binary = _fake_binary(tmp_path / "venv" / "bin" / BINARY_NAME)
+    monkeypatch.setattr(
+        "agentbench.sandbox.discovery.sys.executable", str(binary.parent / "python")
+    )
+    monkeypatch.setattr(
+        "agentbench.sandbox.discovery.Path.is_file",
+        lambda self: str(self) == str(binary),
+    )
+    assert find_executor_binary() == binary
+
+
+def test_a_checkout_build_beats_the_installed_wheel(tmp_path, monkeypatch):
+    """`pip install -e .` installs the published executor; a checkout runs its own."""
+    import agentbench.sandbox.discovery as discovery
+
+    monkeypatch.delenv("AGENTBENCH_EXECUTOR", raising=False)
+    repo_root = Path(discovery.__file__).parent.parent.parent
+    built = repo_root / "rust" / "target" / "release" / BINARY_NAME
+    installed = tmp_path / "venv" / "bin" / BINARY_NAME
+    monkeypatch.setattr(
+        "agentbench.sandbox.discovery.sys.executable", str(installed.parent / "python")
+    )
+    monkeypatch.setattr(
+        "agentbench.sandbox.discovery.Path.is_file",
+        lambda self: str(self) in {str(built), str(installed)},
+    )
+    assert find_executor_binary() == built
 
 
 def test_falls_back_to_path(tmp_path, monkeypatch):

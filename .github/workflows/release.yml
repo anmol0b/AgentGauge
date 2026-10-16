@@ -1,55 +1,115 @@
-name: Release artifacts
+name: Release
 
-# Builds every distributable and uploads them as artifacts. It does not
-# publish: that needs an account decision (PyPI project, trusted publishing
-# or a token), so the upload step is deliberately left to be added once those
-# exist. Running this on a tag gives a complete, downloadable release set in
-# the meantime.
+# Builds every distributable, installs each one the way a user would, and on a
+# `v*` tag publishes them: wheels and sdist to PyPI, everything plus checksums
+# to a GitHub Release.
+#
+# Publishing uses PyPI trusted publishing — no token is stored anywhere. It
+# needs a one-time setup on pypi.org (a trusted publisher per project, naming
+# this repository, this workflow and the `pypi` environment). Run manually
+# with `testpypi` set to rehearse the upload against test.pypi.org first.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      testpypi:
+        description: "Upload to TestPyPI (a rehearsal; real PyPI only ever from a tag)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
 jobs:
-  executor-wheels:
-    name: executord wheel (${{ matrix.target }})
+  versions:
+    name: Versions agree
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Two manifests and a tag each carry the version. A release where they
+      # disagree publishes an executor wheel the client's dependency range
+      # may not accept, so refuse it before building anything.
+      - id: check
+        shell: python
+        run: |
+          import os, tomllib
+          py = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
+          rs = tomllib.load(open("rust/Cargo.toml", "rb"))["workspace"]["package"]["version"]
+          assert py == rs, f"pyproject.toml says {py}, rust/Cargo.toml says {rs}"
+          if os.environ["GITHUB_REF_TYPE"] == "tag":
+              tag = os.environ["GITHUB_REF_NAME"]
+              assert tag == f"v{py}", f"tag {tag} does not match version {py}"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"version={py}\n")
+      # Checked here rather than when the release is made, which is after
+      # the upload to PyPI and so too late to stop anything.
+      - name: CHANGELOG has a section for this version
+        if: github.ref_type == 'tag'
+        run: |
+          sh .github/scripts/release_notes.sh "${{ steps.check.outputs.version }}" > /dev/null
+
+  executor:
+    name: executord (${{ matrix.triple }})
+    needs: versions
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
-            target: x86_64
-          - runner: ubuntu-latest
-            target: aarch64
-          - runner: macos-14
-            target: aarch64
-          - runner: macos-13
-            target: x86_64
+          - { runner: ubuntu-latest, target: x86_64, manylinux: auto, triple: x86_64-unknown-linux-gnu }
+          - { runner: ubuntu-latest, target: aarch64, manylinux: auto, triple: aarch64-unknown-linux-gnu }
+          # musl wheels, so Alpine-based images install the binary instead of
+          # failing to resolve a dependency with no compatible wheel.
+          - { runner: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2, triple: x86_64-unknown-linux-musl }
+          - { runner: ubuntu-latest, target: aarch64, manylinux: musllinux_1_2, triple: aarch64-unknown-linux-musl }
+          - { runner: macos-14, target: aarch64-apple-darwin, manylinux: auto, triple: aarch64-apple-darwin }
+          # Cross-built on Apple silicon: the Intel runners are being retired.
+          - { runner: macos-14, target: x86_64-apple-darwin, manylinux: auto, triple: x86_64-apple-darwin }
     steps:
       - uses: actions/checkout@v4
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          # manylinux is ignored on macOS; on Linux it builds against an old
-          # glibc so the wheel installs on more than the runner's distro.
-          manylinux: auto
+          # Ignored on macOS; on Linux it builds against an old glibc (or
+          # musl) so the wheel installs on more than the runner's distro.
+          manylinux: ${{ matrix.manylinux }}
           args: --release --out dist -m rust/crates/agentbench-executord/Cargo.toml
-      - name: Check the binary is in the wheel
+      # The same binary, without pip, for anyone who would rather point
+      # AGENTBENCH_EXECUTOR at a file. Taken out of the wheel so the two are
+      # byte-identical.
+      - name: Extract a standalone archive
         shell: bash
         run: |
-          python -m zipfile -l dist/*.whl | grep -q agentbench-executord \
-            || { echo "no binary in the wheel"; exit 1; }
+          set -euo pipefail
+          mkdir -p unpacked standalone
+          python3 -m zipfile -e dist/*.whl unpacked
+          bin=$(find unpacked -path '*.data/scripts/agentbench-executord' -type f)
+          [ -n "$bin" ] || { echo "no binary in the wheel"; exit 1; }
+          chmod +x "$bin"
+          name="agentbench-executord-${{ needs.versions.outputs.version }}-${{ matrix.triple }}"
+          mkdir "$name" && cp "$bin" LICENSE "$name/"
+          tar -czf "standalone/$name.tar.gz" "$name"
       - uses: actions/upload-artifact@v4
         with:
-          name: executord-${{ matrix.runner }}-${{ matrix.target }}
+          name: wheel-${{ matrix.triple }}
           path: dist/*.whl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: standalone-${{ matrix.triple }}
+          path: standalone/*.tar.gz
 
-  python-sdist:
+  python:
     name: agentbench sdist and wheel
+    needs: versions
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,13 +118,19 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip build
       - run: python -m build --sdist --wheel --outdir dist .
-      # The Python package must install with no Rust anywhere. If this stops
-      # being true, users on a platform without a wheel lose the tool
-      # entirely rather than falling back to the Python executor.
-      - name: Install the sdist in a clean environment and check the fallback
+      # The Python package must still work with no executor binary at all:
+      # that is every platform without an executord wheel. Install it without
+      # the executor dependency and check it imports and falls back.
+      - name: Install without the executor and check the fallback
         run: |
           python -m venv /tmp/check
-          /tmp/check/bin/pip install dist/*.tar.gz
+          /tmp/check/bin/pip install --no-deps dist/*.tar.gz
+          python - <<'EOF' > /tmp/deps.txt
+          import tomllib
+          deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
+          print("\n".join(d for d in deps if not d.startswith("agentbench-executord")))
+          EOF
+          /tmp/check/bin/pip install -r /tmp/deps.txt
           cd /tmp  # not the repo: cwd on sys.path would import the source tree
           /tmp/check/bin/python -c "
           import agentbench
@@ -75,5 +141,108 @@ jobs:
           "
       - uses: actions/upload-artifact@v4
         with:
-          name: agentbench-python
+          name: python
           path: dist/*
+
+  # Install what was built the way a user would — pip, a fresh venv, nothing
+  # activated — and check the client finds the binary. This is the step that
+  # catches a wheel that builds but does not work where it lands.
+  smoke:
+    name: install (${{ matrix.name }})
+    needs: [executor, python]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux x86_64, runner: ubuntu-latest }
+          - { name: linux aarch64, runner: ubuntu-24.04-arm }
+          - { name: macos arm64, runner: macos-14 }
+          - { name: macos x86_64, runner: macos-15-intel }
+          - { name: alpine x86_64, runner: ubuntu-latest, container: "python:3.12-alpine" }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+          pattern: "{wheel-*,python}"
+      - uses: actions/setup-python@v5
+        if: ${{ !matrix.container }}
+        with:
+          python-version: "3.12"
+      - name: Install and check
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ matrix.container }}" ]; then
+            docker run --rm -v "$PWD:/w" -w /w ${{ matrix.container }} \
+              sh .github/scripts/install_smoke.sh python3 /w/dist
+          else
+            sh .github/scripts/install_smoke.sh python "$PWD/dist"
+          fi
+
+  publish-pypi:
+    name: Publish to ${{ github.ref_type == 'tag' && 'PyPI' || 'TestPyPI' }}
+    needs: [versions, smoke]
+    if: github.ref_type == 'tag' || inputs.testpypi
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_type == 'tag' && 'pypi' || 'testpypi' }}
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: executor
+          merge-multiple: true
+          pattern: wheel-*
+      - uses: actions/download-artifact@v4
+        with:
+          name: python
+          path: python
+      # The executor first: agentbench-ai depends on it, so uploading the
+      # client first leaves a window where installing it fails to resolve.
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: executor
+          repository-url: ${{ github.ref_type == 'tag' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python
+          repository-url: ${{ github.ref_type == 'tag' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+
+  github-release:
+    name: GitHub Release
+    needs: [versions, publish-pypi]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      # Build provenance ties each file to this workflow run. GitHub offers it
+      # for public repositories (private ones need Enterprise Cloud), so it
+      # starts working on its own when the repository is opened.
+      - uses: actions/attest-build-provenance@v2
+        if: github.event.repository.visibility == 'public'
+        with:
+          subject-path: release/*
+      - name: Checksums
+        run: cd release && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      # The release notes are this version's CHANGELOG section, so the two
+      # cannot say different things.
+      - name: Release notes
+        run: sh .github/scripts/release_notes.sh "${{ needs.versions.outputs.version }}" > notes.md
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --notes-file notes.md

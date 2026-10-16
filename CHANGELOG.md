@@ -22,10 +22,14 @@ Nothing has been released yet. 0.1.0 will be the first tag.
 - **An executor contract.** `docs/PROTOCOL.md` specifies the wire form and
   `tests/conformance/` is its normative definition — every implementation is
   held to the same suite.
-- **Packaging.** maturin builds the binary into a wheel
-  (`agentbench-executord`), kept as a separate distribution so the Python
-  package installs with no Rust anywhere. A release workflow builds wheels
-  for macOS arm64/x86_64 and manylinux x86_64/aarch64, plus the sdist.
+- **Packaging.** Published to PyPI as `agentbench-ai` (`agentbench` is
+  taken); the command and import stay `agentbench`. maturin builds the Rust
+  binary into its own wheel (`agentbench-executord`), which `agentbench-ai`
+  depends on for macOS and Linux, so `pip install` brings the binary with no
+  Rust toolchain. Wheels cover macOS arm64/x86_64 and Linux x86_64/aarch64 on
+  glibc and musl. Each tag publishes to PyPI by trusted publishing and to a
+  GitHub Release with standalone binaries and `SHA256SUMS`, after installing
+  every wheel in a clean environment on its platform.
 - **A sandbox benchmark** (`bench/sandbox_bench.py`) and its first results
   (`docs/BENCHMARKS.md`), measured rather than asserted.
 - Medium and hard benchmark tasks, including one where the obvious fix passes
@@ -73,6 +77,9 @@ These change what the numbers mean, not just how they look:
 
 ### Fixed
 
+- The Rust executor installed from its wheel is found when the venv is not
+  activated, and under pipx and `uv tool`; previously these silently used the
+  Python executor. A checkout's own `cargo build` still takes precedence.
 - The sandbox base image is pinned by digest and its pytest by version.
   `python:3.12-slim` is a moving tag, so the environment a task ran in drifted
   between builds — which makes an old run and a new one incomparable.
