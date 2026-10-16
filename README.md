@@ -168,9 +168,11 @@ and both pass the same contract:
 | `python` | In-process docker-py. The reference implementation and fallback |
 
 `auto` looks for the binary at `$AGENTBENCH_EXECUTOR`, then beside the
-installed package, then on `PATH`, then in `rust/target/{release,debug}` — so
-a `cargo build --release` in a checkout is picked up with no further setup.
-Finding none is normal: an sdist install has no binary and uses Python.
+installed package, then in `rust/target/{release,debug}` — so a
+`cargo build --release` in a checkout is picked up with no further setup, ahead
+of the published one `pip install -e .` also installs — then in the Python
+environment's scripts directory, then on `PATH`. Finding none is normal: on a
+platform with no executor wheel, agentbench uses Python.
 
 `docs/PROTOCOL.md` specifies the wire form; `tests/conformance/` is the
 normative definition of correct behaviour, and an implementation is

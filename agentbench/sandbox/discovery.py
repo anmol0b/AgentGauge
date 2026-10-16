@@ -5,13 +5,16 @@ Resolution order, first hit wins:
 1. `AGENTBENCH_EXECUTOR` — an explicit path, for development and for pinning
    a build in CI.
 2. Alongside the installed package.
-3. The running interpreter's scripts directory, where the
+3. `rust/target/{release,debug}` relative to the repo, so a `cargo build` in
+   a checkout is picked up without any further setup. This comes before the
+   installed wheel: `pip install -e .` pulls the published executor too, and
+   a checkout should run its own code. Outside a checkout the path does not
+   exist.
+4. The running interpreter's scripts directory, where the
    `agentbench-executord` wheel installs it. PATH alone misses it when a venv
    is not activated (`.venv/bin/agentbench ...`) or under pipx and `uv tool`,
    which expose only the entry point.
-4. On PATH, for a separately installed binary.
-5. `rust/target/{release,debug}` relative to the repo, so a `cargo build` in
-   a checkout is picked up without any further setup.
+5. On PATH, for a separately installed binary.
 
 Returning None is normal, not an error: an sdist install has no binary and
 falls back to the Python Docker executor.
@@ -40,6 +43,12 @@ def find_executor_binary() -> Path | None:
     if packaged.is_file():
         return packaged
 
+    repo_root = Path(__file__).parent.parent.parent
+    for profile in ("release", "debug"):
+        built = repo_root / "rust" / "target" / profile / BINARY_NAME
+        if built.is_file():
+            return built
+
     for scripts in _scripts_dirs():
         installed = scripts / BINARY_NAME
         if installed.is_file():
@@ -48,12 +57,6 @@ def find_executor_binary() -> Path | None:
     on_path = shutil.which(BINARY_NAME)
     if on_path:
         return Path(on_path)
-
-    repo_root = Path(__file__).parent.parent.parent
-    for profile in ("release", "debug"):
-        built = repo_root / "rust" / "target" / profile / BINARY_NAME
-        if built.is_file():
-            return built
 
     return None
 
