@@ -2,7 +2,7 @@
 
 Usage: ANTHROPIC_API_KEY=... .venv/bin/python scripts/single_run_smoke.py [model]
 Requires: Docker daemon, ANTHROPIC_API_KEY, agentbench-base:py3.12 image
-(build with: docker build -t agentbench-base:py3.12 -f docker/base.Dockerfile docker/)
+(build with: docker build -t agentbench-base:py3.12 - < agentbench/sandbox/base.Dockerfile)
 """
 
 import asyncio

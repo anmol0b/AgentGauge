@@ -150,7 +150,7 @@ jobs:
       - name: Require a Docker daemon
         run: docker info
       - name: Build the sandbox image
-        run: docker build -t agentbench-base:py3.12 -f docker/base.Dockerfile docker/
+        run: docker build -t agentbench-base:py3.12 - < agentbench/sandbox/base.Dockerfile
       # The one test that needs a daemon. It is skipped on laptops, so without
       # this job the Docker executor — the component that actually isolates
       # untrusted agent output — would never be exercised anywhere.

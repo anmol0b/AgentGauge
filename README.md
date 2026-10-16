@@ -49,14 +49,14 @@ bare binaries with a `SHA256SUMS`, for setting `AGENTBENCH_EXECUTOR` by hand.
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-docker build -t agentbench-base:py3.12 -f docker/base.Dockerfile docker/
+docker build -t agentbench-base:py3.12 - < agentbench/sandbox/base.Dockerfile
 ```
 
 Sandboxed containers run with `network_mode=none` (the agent loop calls model APIs
 from the host), so test dependencies must be baked into the image.
 
 The base image is pinned by digest and its pytest by version. A benchmark whose
-sandbox drifts cannot compare a run against an older one — `docker/base.Dockerfile`
+sandbox drifts cannot compare a run against an older one — `agentbench/sandbox/base.Dockerfile`
 says how to update the pin deliberately.
 
 ### Models
