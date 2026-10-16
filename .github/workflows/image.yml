@@ -1,0 +1,71 @@
+name: Sandbox image
+
+# Builds agentbench/sandbox/base.Dockerfile for linux/amd64 and linux/arm64
+# and pushes it to the repository named in agentbench/sandbox/image.py, which
+# is the image every run defaults to.
+#
+# Pushing does not change that default. image.py pins a digest, and moving it
+# is a commit, deliberately: a rebuild is not reproducible (apt resolves git
+# afresh), so each build is a new sandbox, and runs in different sandboxes do
+# not compare. The digest to paste is in this run's summary.
+#
+# One-time setup: after the first push, make the package public (its page on
+# GitHub, Package settings, Change visibility). A package from a private
+# repository starts private, and the release refuses to publish until an
+# anonymous pull of the pinned digest works.
+on:
+  push:
+    branches: [main]
+    paths: [agentbench/sandbox/base.Dockerfile]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  push:
+    name: Build and push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - id: names
+        run: python3 .github/scripts/image_names.py >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The py3.12 tag follows the latest build, for looking at by hand. The
+      # dockerfile-<sha256> tag is what the release checks the pin against.
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: agentbench/sandbox
+          file: agentbench/sandbox/base.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.names.outputs.repository }}:${{ steps.names.outputs.tag }}
+            ${{ steps.names.outputs.repository }}:${{ steps.names.outputs.dockerfile_tag }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PINNED: ${{ steps.names.outputs.digest }}
+        run: |
+          {
+            echo "Built \`${{ steps.names.outputs.repository }}@$DIGEST\`."
+            echo
+            if [ "$DIGEST" = "$PINNED" ]; then
+              echo "This is already the digest pinned in agentbench/sandbox/image.py."
+            else
+              echo "To make it the default, set in agentbench/sandbox/image.py:"
+              echo
+              echo "    IMAGE_DIGEST = \"$DIGEST\""
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
