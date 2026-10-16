@@ -31,7 +31,21 @@ agentbench/
 └── tasks/                 # YAML task definitions + fixture repos
 ```
 
-### Setup
+### Install
+
+macOS and Linux, Python 3.12+, and a running Docker daemon:
+
+```sh
+pip install agentbench-ai        # or: uv tool install agentbench-ai
+```
+
+The distribution is `agentbench-ai` because `agentbench` is taken on PyPI; the
+command and the import are both `agentbench`. It pulls in the Rust sandbox
+executor as a prebuilt wheel (macOS arm64/x86_64, Linux x86_64/aarch64, glibc
+or musl), so no Rust toolchain is needed. Each GitHub Release also carries the
+bare binaries with a `SHA256SUMS`, for setting `AGENTBENCH_EXECUTOR` by hand.
+
+### Development setup
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
