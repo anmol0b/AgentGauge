@@ -20,7 +20,7 @@ from agentbench.reporting.aggregate import aggregate, comparable_repos
 from agentbench.reporting.html_report import render_html
 from agentbench.sandbox.discovery import find_executor_binary
 from agentbench.sandbox.executor import SandboxExecutor
-from agentbench.sandbox.image import LOCAL_IMAGE, build_image
+from agentbench.sandbox.image import DEFAULT_IMAGE, LOCAL_IMAGE, build_image
 from agentbench.storage.db import RunStore
 
 
@@ -44,8 +44,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument(
         "--image",
-        default="agentbench-base:py3.12",
-        help="Sandbox image (must contain test deps; no network in sandbox)",
+        default=DEFAULT_IMAGE,
+        help="Sandbox image (must contain test deps; no network in sandbox). "
+        "Defaults to the published build, pulled on first use.",
     )
     parser.add_argument("--db", default="agentbench.db", help="SQLite run history path")
     parser.add_argument("--out", default="report.html", help="HTML report output path")
@@ -117,6 +118,12 @@ async def amain() -> None:
     taskset = TaskSet(**yaml.safe_load(Path(args.tasks).read_text()))
     if args.repo:
         taskset.tasks = [task.pointed_at(args.repo) for task in taskset.tasks]
+    from agentbench.sandbox.docker_executor import ImageUnavailable, ensure_image
+
+    try:
+        ensure_image(args.image)
+    except ImageUnavailable as err:
+        sys.exit(f"agentbench: {err}")
     executor = make_executor(args.executor)
     run_set_id = uuid.uuid4().hex[:12]
 

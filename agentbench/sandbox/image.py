@@ -1,8 +1,24 @@
-"""The sandbox image, built locally from the Dockerfile shipped in the package."""
+"""The sandbox image: the published build every run defaults to, and building one locally.
+
+This module imports nothing from the package, so the release workflow can
+read the names below with `runpy` and they live in this one place.
+"""
 
 import shutil
 import subprocess
 from importlib.resources import files
+
+# Where the sandbox image is published, and the build of it this version runs
+# in. Pinned by digest for the reason the Dockerfile pins its base: a tag can
+# move, and a sandbox that drifts cannot compare a run against an older one.
+#
+# To update, deliberately: run the "Sandbox image" workflow, which builds the
+# Dockerfile below and pushes it here, and paste the digest it reports. A
+# release refuses to publish unless this digest is public and was built from
+# the Dockerfile being released.
+IMAGE_REPOSITORY = "ghcr.io/anmol0b/agentbench-base"
+IMAGE_DIGEST = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+DEFAULT_IMAGE = f"{IMAGE_REPOSITORY}@{IMAGE_DIGEST}"
 
 # What `agentbench image build` tags, and what the docker tests and CI use: an
 # image built from the Dockerfile in this checkout or install.
