@@ -13,7 +13,7 @@ no Rust and no API keys**, and it is what gates every pull request.
 Two optional extras, only if you are touching what they cover:
 
 ```sh
-docker build -t agentbench-base:py3.12 - < agentbench/sandbox/base.Dockerfile
+.venv/bin/agentbench image build           # the sandbox image
 .venv/bin/pytest tests/ -m docker          # the sandbox, for real
 
 cd rust && cargo build --release           # the Rust executor

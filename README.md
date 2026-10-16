@@ -49,7 +49,7 @@ bare binaries with a `SHA256SUMS`, for setting `AGENTBENCH_EXECUTOR` by hand.
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-docker build -t agentbench-base:py3.12 - < agentbench/sandbox/base.Dockerfile
+.venv/bin/agentbench image build   # the sandbox image, agentbench-base:py3.12
 ```
 
 Sandboxed containers run with `network_mode=none` (the agent loop calls model APIs
