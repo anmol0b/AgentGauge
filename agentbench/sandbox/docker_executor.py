@@ -14,6 +14,7 @@ from typing import Any
 import docker.errors
 from docker.client import DockerClient, from_env
 
+from agentbench.sandbox.image import LOCAL_IMAGE
 from agentbench.sandbox.policy import SandboxPolicy
 from agentbench.sandbox.protocol import (
     ExecResult,
@@ -28,6 +29,40 @@ _TIMEOUT_EXIT_CODES = {124, 137}
 # Extra slack on the host-side deadline, so the in-container timeout is what
 # normally fires and the host wait is only a backstop.
 _HOST_TIMEOUT_GRACE_S = 15
+
+
+class ImageUnavailable(RuntimeError):
+    """Docker is unreachable, or the sandbox image is absent and cannot be pulled."""
+
+
+def ensure_image(image: str) -> None:
+    """Make sure `image` is present, pulling it once if not.
+
+    Done once before a benchmark starts, so a missing image is one clear error
+    rather than every run failing on its own with a registry message.
+    """
+    try:
+        client = from_env()
+        client.ping()
+    except docker.errors.DockerException as err:
+        raise ImageUnavailable(
+            f"cannot reach the Docker daemon. Is Docker running? ({err})"
+        ) from err
+    try:
+        client.images.get(image)
+        return
+    except docker.errors.ImageNotFound:
+        pass
+    print(f"pulling sandbox image {image} (once; later runs reuse it)")
+    try:
+        client.images.pull(image)
+    except docker.errors.DockerException as err:
+        reason = getattr(err, "explanation", None) or err
+        raise ImageUnavailable(
+            f"cannot pull the sandbox image {image}: {reason}\n"
+            "Every task runs inside it. To build it here instead, from the Dockerfile "
+            f"in this package:\n  agentbench image build\nthen run with --image {LOCAL_IMAGE}"
+        ) from err
 
 
 class DockerSandboxExecutor:

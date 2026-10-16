@@ -3,10 +3,12 @@
 Usage:
   python -m agentbench.cli --tasks agentbench/tasks/example.yaml \
       --model claude-sonnet-4-5 --runs-per-task 3
+  python -m agentbench.cli image build
 """
 
 import argparse
 import asyncio
+import sys
 import uuid
 from pathlib import Path
 
@@ -18,6 +20,7 @@ from agentbench.reporting.aggregate import aggregate, comparable_repos
 from agentbench.reporting.html_report import render_html
 from agentbench.sandbox.discovery import find_executor_binary
 from agentbench.sandbox.executor import SandboxExecutor
+from agentbench.sandbox.image import DEFAULT_IMAGE, LOCAL_IMAGE, build_image
 from agentbench.storage.db import RunStore
 
 
@@ -25,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="agentbench",
         description="Benchmark AI coding agents on real repo tasks, in Docker sandboxes.",
+        epilog="`agentbench image build` builds the sandbox image locally instead.",
     )
     parser.add_argument("--tasks", required=True, help="YAML task set file")
     parser.add_argument(
@@ -40,8 +44,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument(
         "--image",
-        default="agentbench-base:py3.12",
-        help="Sandbox image (must contain test deps; no network in sandbox)",
+        default=DEFAULT_IMAGE,
+        help="Sandbox image (must contain test deps; no network in sandbox). "
+        "Defaults to the published build, pulled on first use.",
     )
     parser.add_argument("--db", default="agentbench.db", help="SQLite run history path")
     parser.add_argument("--out", default="report.html", help="HTML report output path")
@@ -59,6 +64,27 @@ def parse_args() -> argparse.Namespace:
         "Mixes separate benchmark sessions into one pass rate — off by default.",
     )
     return parser.parse_args()
+
+
+def parse_image_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="agentbench image", description="The sandbox image.")
+    actions = parser.add_subparsers(dest="action", required=True)
+    build = actions.add_parser(
+        "build",
+        help="Build the sandbox image from the Dockerfile in this package, "
+        "for when the published one cannot be pulled.",
+    )
+    build.add_argument("--tag", default=LOCAL_IMAGE, help="Tag for the built image")
+    return parser.parse_args(argv)
+
+
+def image_main(argv: list[str]) -> None:
+    args = parse_image_args(argv)
+    try:
+        build_image(args.tag)
+    except RuntimeError as err:
+        sys.exit(f"agentbench: {err}")
+    print(f"\nbuilt {args.tag}; use it with --image {args.tag}")
 
 
 def make_executor(choice: str) -> SandboxExecutor:
@@ -92,6 +118,12 @@ async def amain() -> None:
     taskset = TaskSet(**yaml.safe_load(Path(args.tasks).read_text()))
     if args.repo:
         taskset.tasks = [task.pointed_at(args.repo) for task in taskset.tasks]
+    from agentbench.sandbox.docker_executor import ImageUnavailable, ensure_image
+
+    try:
+        ensure_image(args.image)
+    except ImageUnavailable as err:
+        sys.exit(f"agentbench: {err}")
     executor = make_executor(args.executor)
     run_set_id = uuid.uuid4().hex[:12]
 
@@ -154,6 +186,11 @@ async def amain() -> None:
 
 
 def main() -> None:
+    # A subcommand alongside the flat run arguments, which predate it and
+    # stay as they are: `agentbench --tasks ...` is the common case.
+    if sys.argv[1:2] == ["image"]:
+        image_main(sys.argv[2:])
+        return
     asyncio.run(amain())
 
 

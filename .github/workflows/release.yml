@@ -2,7 +2,8 @@ name: Release
 
 # Builds every distributable, installs each one the way a user would, and on a
 # `v*` tag publishes them: wheels and sdist to PyPI, everything plus checksums
-# to a GitHub Release.
+# to a GitHub Release, and the version as a tag on the sandbox image. The
+# image itself is built by image.yml; this checks its pin before publishing.
 #
 # Publishing uses PyPI trusted publishing — no token is stored anywhere. It
 # needs a one-time setup on pypi.org (a trusted publisher per project, naming
@@ -144,6 +145,38 @@ jobs:
           name: python
           path: dist/*
 
+  # Every run defaults to the sandbox image pinned in agentbench/sandbox/
+  # image.py, so a release whose pin a user cannot pull does not work at all.
+  # The image is built and pinned ahead of time by image.yml, not here: the
+  # digest must be in the source this tag releases.
+  image:
+    name: Sandbox image is pullable
+    needs: versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: names
+        run: python3 .github/scripts/image_names.py >> "$GITHUB_OUTPUT"
+      # No login: an anonymous pull is what a user's machine does, so this is
+      # also what proves the package is public.
+      - name: The pinned digest is public and built from this Dockerfile
+        env:
+          REPOSITORY: ${{ steps.names.outputs.repository }}
+          PINNED: ${{ steps.names.outputs.digest }}
+          BUILT_TAG: ${{ steps.names.outputs.dockerfile_tag }}
+        run: |
+          set -euo pipefail
+          ref="$REPOSITORY:$BUILT_TAG"
+          if ! built=$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest); then
+            echo "::error::cannot pull $ref anonymously. Either this Dockerfile was never pushed (run the Sandbox image workflow) or the package is not public."
+            exit 1
+          fi
+          if [ "$built" != "$PINNED" ]; then
+            echo "::error::agentbench/sandbox/image.py pins $PINNED, but this Dockerfile's build is $built. Pin the build of the Dockerfile being released."
+            exit 1
+          fi
+          echo "pinned $REPOSITORY@$PINNED is public and built from this Dockerfile"
+
   # Install what was built the way a user would — pip, a fresh venv, nothing
   # activated — and check the client finds the binary. This is the step that
   # catches a wheel that builds but does not work where it lands.
@@ -186,7 +219,7 @@ jobs:
 
   publish-pypi:
     name: Publish to ${{ github.ref_type == 'tag' && 'PyPI' || 'TestPyPI' }}
-    needs: [versions, smoke]
+    needs: [versions, image, smoke]
     if: github.ref_type == 'tag' || inputs.testpypi
     runs-on: ubuntu-latest
     environment:
@@ -213,6 +246,33 @@ jobs:
         with:
           packages-dir: python
           repository-url: ${{ github.ref_type == 'tag' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+
+  # The release's sandbox under its version, so `docker pull ...:0.1.0` gets
+  # what that version runs in. Only a new tag on the pinned digest; nothing
+  # is rebuilt.
+  image-tag:
+    name: Tag the sandbox image
+    needs: [versions, publish-pypi]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - id: names
+        run: python3 .github/scripts/image_names.py >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag the pinned digest with the version
+        env:
+          REPOSITORY: ${{ steps.names.outputs.repository }}
+          PINNED: ${{ steps.names.outputs.digest }}
+          VERSION: ${{ needs.versions.outputs.version }}
+        run: docker buildx imagetools create --tag "$REPOSITORY:$VERSION" "$REPOSITORY@$PINNED"
 
   github-release:
     name: GitHub Release

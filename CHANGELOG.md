@@ -30,6 +30,15 @@ Nothing has been released yet. 0.1.0 will be the first tag.
   glibc and musl. Each tag publishes to PyPI by trusted publishing and to a
   GitHub Release with standalone binaries and `SHA256SUMS`, after installing
   every wheel in a clean environment on its platform.
+- **A published sandbox image.** `--image` defaults to
+  `ghcr.io/anmol0b/agentbench-base`, pinned by digest and pulled on first
+  use, so an install runs tasks with no checkout. A release refuses to
+  publish unless that digest is public and built from the Dockerfile it
+  ships. Where the registry cannot be reached, `agentbench image build`
+  builds the same image from the Dockerfile, which now ships in the package
+  (`agentbench/sandbox/base.Dockerfile`, formerly `docker/base.Dockerfile`).
+  An image that cannot be pulled, or a Docker daemon that is not running, is
+  one error before any run starts.
 - **A sandbox benchmark** (`bench/sandbox_bench.py`) and its first results
   (`docs/BENCHMARKS.md`), measured rather than asserted.
 - Medium and hard benchmark tasks, including one where the obvious fix passes

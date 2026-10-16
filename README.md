@@ -45,19 +45,30 @@ executor as a prebuilt wheel (macOS arm64/x86_64, Linux x86_64/aarch64, glibc
 or musl), so no Rust toolchain is needed. Each GitHub Release also carries the
 bare binaries with a `SHA256SUMS`, for setting `AGENTBENCH_EXECUTOR` by hand.
 
+Tasks run in a sandbox image, `ghcr.io/anmol0b/agentbench-base`, which the
+first run pulls. It is pinned by digest, so every install of a version runs in
+the same sandbox. Where that registry cannot be reached, build the same
+Dockerfile locally — it ships in the package — and point runs at it:
+
+```sh
+agentbench image build             # tags agentbench-base:py3.12
+agentbench --image agentbench-base:py3.12 --tasks ... --model ...
+```
+
 ### Development setup
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-docker build -t agentbench-base:py3.12 -f docker/base.Dockerfile docker/
+.venv/bin/agentbench image build   # agentbench-base:py3.12, for the docker tests
 ```
 
 Sandboxed containers run with `network_mode=none` (the agent loop calls model APIs
 from the host), so test dependencies must be baked into the image.
 
-The base image is pinned by digest and its pytest by version. A benchmark whose
-sandbox drifts cannot compare a run against an older one — `docker/base.Dockerfile`
-says how to update the pin deliberately.
+The base image is pinned by digest and its pytest by version, and runs default
+to the published build pinned by digest. A benchmark whose sandbox drifts cannot
+compare a run against an older one — `agentbench/sandbox/base.Dockerfile` and
+`agentbench/sandbox/image.py` say how to update each pin deliberately.
 
 ### Models
 
