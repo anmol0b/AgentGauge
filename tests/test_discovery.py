@@ -31,6 +31,21 @@ def test_a_wrong_explicit_path_is_an_error_not_a_fallback(tmp_path, monkeypatch)
         find_executor_binary()
 
 
+def test_finds_the_wheel_install_without_an_activated_venv(tmp_path, monkeypatch):
+    """`.venv/bin/agentbench` run directly has the venv's bin off PATH."""
+    monkeypatch.delenv("AGENTBENCH_EXECUTOR", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    binary = _fake_binary(tmp_path / "venv" / "bin" / BINARY_NAME)
+    monkeypatch.setattr(
+        "agentbench.sandbox.discovery.sys.executable", str(binary.parent / "python")
+    )
+    monkeypatch.setattr(
+        "agentbench.sandbox.discovery.Path.is_file",
+        lambda self: str(self) == str(binary),
+    )
+    assert find_executor_binary() == binary
+
+
 def test_falls_back_to_path(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENTBENCH_EXECUTOR", raising=False)
     binary = _fake_binary(tmp_path / "bin" / BINARY_NAME)
