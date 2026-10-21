@@ -38,6 +38,18 @@ class AgentLoopResult(BaseModel):
     stop_reason: str  # "end_turn" | "max_turns" | "max_tokens" | "error"
 
 
+class AgentLoopError(Exception):
+    """A loop that failed part-way, carrying what it had already done.
+
+    Tokens spent on the turns before the failure were billed, so a run that
+    dies on turn six must still report them rather than costing $0.
+    """
+
+    def __init__(self, partial: AgentLoopResult) -> None:
+        super().__init__("agent loop failed")
+        self.partial = partial
+
+
 async def run_agent_loop(
     provider: ModelProvider,
     executor: SandboxExecutor,
@@ -53,39 +65,52 @@ async def run_agent_loop(
     tool_call_count = 0
     made_mutation = False
 
-    for _ in range(max_turns):
-        response = await provider.run_agent_turn(messages, TOOLS)
-        messages.extend(response.messages)
-        total_usage.tokens_in += response.usage.tokens_in
-        total_usage.tokens_out += response.usage.tokens_out
-        turn_cost = provider.compute_cost(response.usage)
-        if turn_cost is None:
-            total_cost = None  # unpriced model: no honest total exists
-        elif total_cost is not None:
-            total_cost += turn_cost
+    try:
+        for _ in range(max_turns):
+            response = await provider.run_agent_turn(messages, TOOLS)
+            messages.extend(response.messages)
+            total_usage.tokens_in += response.usage.tokens_in
+            total_usage.tokens_out += response.usage.tokens_out
+            turn_cost = provider.compute_cost(response.usage)
+            if turn_cost is None:
+                total_cost = None  # unpriced model: no honest total exists
+            elif total_cost is not None:
+                total_cost += turn_cost
 
-        if response.stop_reason != "tool_use" or not response.tool_calls:
-            if not made_mutation:
-                # Weak models often describe the fix in prose and stop without
-                # editing anything. Nudge them back to work instead of ending.
-                messages.append(Message(role="user", content=_NO_EDIT_NUDGE))
-                continue
-            return AgentLoopResult(
+            if response.stop_reason != "tool_use" or not response.tool_calls:
+                if not made_mutation:
+                    # Weak models often describe the fix in prose and stop without
+                    # editing anything. Nudge them back to work instead of ending.
+                    messages.append(Message(role="user", content=_NO_EDIT_NUDGE))
+                    continue
+                return AgentLoopResult(
+                    messages=messages,
+                    usage=total_usage,
+                    cost_usd=total_cost,
+                    tool_call_count=tool_call_count,
+                    stop_reason=response.stop_reason,
+                )
+
+            tool_call_count += len(response.tool_calls)
+            for call in response.tool_calls:
+                output = await execute_tool(
+                    call.name, call.arguments, executor, handle, exec_timeout_s
+                )
+                if call.name in _MUTATING_TOOLS and output.startswith(("wrote ", "edited ")):
+                    # only a *successful* edit counts — a failed old_string match
+                    # shouldn't stop the no-edit nudge
+                    made_mutation = True
+                messages.append(Message(role="tool", content=output, tool_call_id=call.id))
+    except Exception as exc:
+        raise AgentLoopError(
+            AgentLoopResult(
                 messages=messages,
                 usage=total_usage,
                 cost_usd=total_cost,
                 tool_call_count=tool_call_count,
-                stop_reason=response.stop_reason,
+                stop_reason="error",
             )
-
-        tool_call_count += len(response.tool_calls)
-        for call in response.tool_calls:
-            output = await execute_tool(call.name, call.arguments, executor, handle, exec_timeout_s)
-            if call.name in _MUTATING_TOOLS and output.startswith(("wrote ", "edited ")):
-                # only a *successful* edit counts — a failed old_string match
-                # shouldn't stop the no-edit nudge
-                made_mutation = True
-            messages.append(Message(role="tool", content=output, tool_call_id=call.id))
+        ) from exc
 
     return AgentLoopResult(
         messages=messages,

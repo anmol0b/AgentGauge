@@ -7,7 +7,7 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from agentbench.agent_loop.loop import DEFAULT_SYSTEM_PROMPT, run_agent_loop
+from agentbench.agent_loop.loop import DEFAULT_SYSTEM_PROMPT, AgentLoopError, run_agent_loop
 from agentbench.agent_loop.transcript import compact_transcript
 from agentbench.models.run import RunResult, Transcript
 from agentbench.models.task import Task
@@ -68,14 +68,19 @@ async def run_once(
             agent_started = time.monotonic()
 
             run_provider = provider or make_provider(model, system=DEFAULT_SYSTEM_PROMPT)
-            loop_result = await run_agent_loop(
-                run_provider,
-                executor,
-                handle,
-                instruction=await _instruction(executor, handle, task),
-                max_turns=max_turns,
-                on_output=on_output,
-            )
+            failure: BaseException | None = None
+            try:
+                loop_result = await run_agent_loop(
+                    run_provider,
+                    executor,
+                    handle,
+                    instruction=await _instruction(executor, handle, task),
+                    max_turns=max_turns,
+                    on_output=on_output,
+                )
+            except AgentLoopError as exc:
+                # record the turns that did run, then fail the run as before
+                loop_result, failure = exc.partial, exc.__cause__
             tokens_in = loop_result.usage.tokens_in
             tokens_out = loop_result.usage.tokens_out
             cost = loop_result.cost_usd
@@ -85,6 +90,8 @@ async def run_once(
             # has a record of what the agent did
             transcript = compact_transcript(loop_result.messages)
             agent_s = time.monotonic() - agent_started
+            if failure is not None:
+                raise failure
 
             grading_started = time.monotonic()
             check = await executor.exec(

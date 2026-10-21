@@ -150,6 +150,30 @@ async def test_run_once_reports_harness_errors(tmp_path, monkeypatch):
     assert executor.torn_down is True  # teardown still runs on the error path
 
 
+class FailsOnTurnTwoProvider(OneEditProvider):
+    """Turn 1 succeeds and is billed; turn 2 hits a provider error."""
+
+    async def run_agent_turn(self, messages, tools) -> ProviderResponse:
+        if self.turns == 1:
+            raise RuntimeError("503 high demand")
+        return await super().run_agent_turn(messages, tools)
+
+
+async def test_a_run_that_fails_mid_loop_keeps_what_it_spent(tmp_path):
+    """Tokens billed before the failure must not be reported as $0."""
+    result = await run_once(
+        _task(tmp_path), 0, "fake-model", ScriptedExecutor(), provider=FailsOnTurnTwoProvider()
+    )
+
+    assert result.error == "RuntimeError: 503 high demand"
+    assert result.passed is False
+    assert result.tokens_in == 10 and result.tokens_out == 5
+    assert result.cost_usd == 0.001
+    assert result.tool_call_count == 1
+    assert result.stop_reason == "error"
+    assert result.transcript is not None and result.transcript.turns
+
+
 def test_is_test_path():
     assert _is_test_path("test_calc.py")
     assert _is_test_path("tests/helpers.py")
