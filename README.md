@@ -74,12 +74,14 @@ compare a run against an older one — `agentgauge/sandbox/base.Dockerfile` and
 
 ## Models
 
-- Anthropic: `export ANTHROPIC_API_KEY=...`, use `--model claude-sonnet-5`
-- OpenAI: `export OPENAI_API_KEY=...`, use `--model gpt-4o`
 - Gemini (free tier available): `export GEMINI_API_KEY=...`, use
   `--model gemini-3.6-flash`. Runs through Google's OpenAI-compatible
   endpoint. A free key is rate-limited, so use `--concurrency 1`; the reported
-  cost is what the run would cost on a paid key.
+  cost is what the run would cost on a paid key. **Run live** end to end.
+- Anthropic: `export ANTHROPIC_API_KEY=...`, use `--model claude-sonnet-5`.
+  **Not yet run against the live API.**
+- OpenAI: `export OPENAI_API_KEY=...`, use `--model gpt-4o`.
+  **Not yet run against the live API.**
 - Ollama (free, local, no key): pull a model, set `FROM` in `ollama/Modelfile` to
   match, `ollama create agentgauge-qwen -f ollama/Modelfile`, then
   `--model ollama/agentgauge-qwen`. The Modelfile exists to raise Ollama's default
@@ -87,6 +89,12 @@ compare a run against an older one — `agentgauge/sandbox/base.Dockerfile` and
 
 One provider is built per model and shared across that model's runs, so a
 missing API key fails immediately rather than after every run has errored.
+
+"Not yet run" is a statement about evidence, not a known fault: both providers
+are tested offline against responses shaped by their own SDKs' schemas
+(`tests/fixtures/responses/`), which checks parsing and cost arithmetic but
+not what a live server sends. Gemini's tests replay responses recorded from
+the live endpoint.
 
 Costs come from `agentgauge/providers/pricing.yaml`. A model with no entry there
 reports **no cost at all** rather than a figure guessed from another model's rate —
@@ -173,9 +181,12 @@ Full trust boundaries, including what is deliberately not defended:
 
 ## Limitations
 
-- **No paid model has been benchmarked yet.** Every run in the committed database is
-  a local Ollama model at zero cost. The Anthropic and OpenAI code paths are unit
-  tested but have never been exercised end to end against a live API.
+- **Only Gemini and Ollama have run end to end.** Gemini on its free tier, which
+  so far covers a single task; the Anthropic and OpenAI paths are tested against
+  schema-shaped responses only (see Models).
+- **Rate-limit waits count towards latency.** A run that waited out a 429 reports
+  that wait in `latency_s` and `agent_s`, so latency on a throttled free-tier key
+  overstates the model's own speed. Cost and pass/fail are unaffected.
 - **Latency is measured under concurrency** and is not comparable across different
   `--concurrency` values. The report states this.
 - **The full suite runs twice per task run** (once for a baseline, once after the
