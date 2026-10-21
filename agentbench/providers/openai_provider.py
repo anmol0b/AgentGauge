@@ -5,6 +5,7 @@ import uuid
 from typing import Any, cast
 
 import openai
+from openai.types import CompletionUsage
 
 from agentbench.models.provider import (
     Message,
@@ -96,7 +97,7 @@ class OpenAIProvider:
             # not broken out here — doing so would double-count them.
             usage = TokenUsage(
                 tokens_in=response.usage.prompt_tokens,
-                tokens_out=response.usage.completion_tokens,
+                tokens_out=_billed_output_tokens(response.usage),
             )
         return ProviderResponse(
             messages=[assistant],
@@ -109,6 +110,20 @@ class OpenAIProvider:
         """None when this model has no price on file — never a guess."""
         price = self._price or lookup(self._model)
         return price.cost(usage) if price else None
+
+
+def _billed_output_tokens(usage: CompletionUsage) -> int:
+    """Output tokens as billed, thinking included.
+
+    OpenAI counts reasoning tokens inside completion_tokens. Gemini's
+    compatible endpoint leaves them out and only shows them in total_tokens
+    (7 in, 5 out, 255 total for a three-word reply), yet bills them as
+    output — so completion_tokens alone under-reports cost several-fold.
+    """
+    total = getattr(usage, "total_tokens", None)
+    if isinstance(total, int):
+        return max(usage.completion_tokens, total - usage.prompt_tokens)
+    return usage.completion_tokens
 
 
 def _to_openai_messages(messages: list[Message]) -> list[dict[str, Any]]:

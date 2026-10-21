@@ -166,6 +166,27 @@ async def test_openai_tolerates_a_response_without_usage():
     assert result.usage.tokens_in == 0 and result.stop_reason == "end_turn"
 
 
+async def test_openai_counts_thinking_left_out_of_completion_tokens():
+    """Gemini reports thinking only in total_tokens, and bills it as output."""
+    provider = OpenAIProvider("gemini-3.6-flash", api_key="t")
+    response = _openai_response("Hi there, friend!", None, "stop")
+    response.usage = SimpleNamespace(prompt_tokens=7, completion_tokens=5, total_tokens=255)
+    _openai(provider, response)
+
+    usage = (await provider.run_agent_turn(MESSAGES, TOOLS)).usage
+    assert usage.tokens_in == 7 and usage.tokens_out == 248
+
+
+async def test_openai_does_not_double_count_reasoning_already_in_completion():
+    """OpenAI's completion_tokens already includes reasoning."""
+    provider = OpenAIProvider("o3-mini", api_key="t")
+    response = _openai_response("done", None, "stop")
+    response.usage = SimpleNamespace(prompt_tokens=80, completion_tokens=20, total_tokens=100)
+    _openai(provider, response)
+
+    assert (await provider.run_agent_turn(MESSAGES, TOOLS)).usage.tokens_out == 20
+
+
 @pytest.mark.parametrize(
     "finish,expected",
     [
