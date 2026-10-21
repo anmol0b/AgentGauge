@@ -7,6 +7,16 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/pytest tests/ -m "not docker"
 ```
 
+Until 0.1.0 is on PyPI, the `agentgauge-executord` wheel that `agentgauge`
+depends on cannot be downloaded, so the install above fails. Build it once
+first (this needs Rust), then install against it — CI does the same:
+
+```sh
+.venv/bin/pip install maturin
+.venv/bin/maturin build --release --out wheels -m rust/crates/agentgauge-executord/Cargo.toml
+PIP_FIND_LINKS=wheels .venv/bin/pip install -e ".[dev]"
+```
+
 That is the whole setup for most work. The offline suite needs **no Docker,
 no Rust and no API keys**, and it is what gates every pull request.
 

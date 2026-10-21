@@ -61,6 +61,9 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/agentgauge image build   # agentgauge-base:py3.12, for the docker tests
 ```
 
+Before the first release this install needs the executor wheel built locally
+— see `CONTRIBUTING.md`.
+
 Sandboxed containers run with `network_mode=none` (the agent loop calls model APIs
 from the host), so test dependencies must be baked into the image.
 
