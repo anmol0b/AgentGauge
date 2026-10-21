@@ -235,6 +235,22 @@ async def test_openai_sends_no_extra_content_for_a_plain_tool_call():
     assert "extra_content" not in fake.kwargs["messages"][1]["tool_calls"][0]
 
 
+async def test_openai_splits_cached_prompt_tokens_out_of_input():
+    """Cached input bills at its own rate, so it must not count as input too."""
+    provider = OpenAIProvider("gpt-4o", api_key="t")
+    response = _openai_response("done", None, "stop")
+    response.usage = SimpleNamespace(
+        prompt_tokens=100,
+        completion_tokens=10,
+        total_tokens=110,
+        prompt_tokens_details=SimpleNamespace(cached_tokens=60),
+    )
+    _openai(provider, response)
+
+    usage = (await provider.run_agent_turn(MESSAGES, TOOLS)).usage
+    assert (usage.tokens_in, usage.cache_read_tokens) == (40, 60)
+
+
 async def test_openai_counts_thinking_left_out_of_completion_tokens():
     """Gemini reports thinking only in total_tokens, and bills it as output."""
     provider = OpenAIProvider("gemini-3.6-flash", api_key="t")

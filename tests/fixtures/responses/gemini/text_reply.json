@@ -1,0 +1,1 @@
+{"choices":[{"finish_reason":"stop","index":0,"message":{"content":"Hello my friend!","extra_content":{"google":{"thought_signature":"EroICrcIAWkUfROI"}},"role":"assistant"}}],"created":1792577272,"id":"7I7Yaoq6FYuO4-EP-7nDoAQ","model":"gemini-3.6-flash","object":"chat.completion","usage":{"completion_tokens":4,"prompt_tokens":7,"total_tokens":348}}

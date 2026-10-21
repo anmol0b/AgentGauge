@@ -19,6 +19,10 @@ Nothing has been released yet. 0.1.0 will be the first tag.
   so the real set is seven tasks across four repositories instead of two
   from one. Each is verified in CI against an actual clone.
 
+- **Replay tests for provider responses.** Real Gemini responses recorded
+  during live runs, and OpenAI/Anthropic responses built from their SDK
+  schemas, run through parsing, the loop and pricing with no API key.
+
 - **Gemini models.** `--model gemini-*` with `GEMINI_API_KEY`, through
   Google's OpenAI-compatible endpoint. Thinking tokens, which that endpoint
   leaves out of `completion_tokens`, are counted as output, and Gemini 3's
@@ -95,6 +99,9 @@ These change what the numbers mean, not just how they look:
 
 ### Fixed
 
+- **OpenAI cached input is billed at its cached rate.** It was counted as
+  ordinary input, overstating cost by up to the cache discount on every turn
+  after the first few.
 - The Rust executor installed from its wheel is found when the venv is not
   activated, and under pipx and `uv tool`; previously these silently used the
   Python executor. A checkout's own `cargo build` still takes precedence.
