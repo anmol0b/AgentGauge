@@ -1,6 +1,8 @@
 """OpenAI implementation of ModelProvider."""
 
+import asyncio
 import json
+import re
 import uuid
 from typing import Any, cast
 
@@ -22,6 +24,15 @@ _STOP_MAP: dict[str, StopReason] = {
     "tool_calls": "tool_use",
     "length": "max_tokens",
 }
+
+
+# Rate limits and overloads are retried here, not left to the SDK: its two
+# quick retries end long before a free-tier quota resets (Gemini asks for
+# ~40s), so every run on a free key died on its first throttled turn.
+_MAX_ATTEMPTS = 8
+_MAX_WAIT_S = 120.0  # a longer requested wait is a daily quota: give up
+_RETRY_AFTER = re.compile(r"retry(?:Delay| in)\W*(\d+(?:\.\d+)?)s")
+_sleep = asyncio.sleep  # replaced in tests
 
 
 class OpenAIProvider:
@@ -49,7 +60,7 @@ class OpenAIProvider:
         if self._system:
             wire.append({"role": "system", "content": self._system})
         wire.extend(_to_openai_messages(messages))
-        response = await self._client.chat.completions.create(
+        response = await self._create_with_retry(
             model=self._model,
             max_tokens=self._max_tokens,
             # provider-neutral messages are converted to plain dicts by design
@@ -108,10 +119,29 @@ class OpenAIProvider:
             stop_reason=_STOP_MAP.get(finish_reason, "error"),
         )
 
+    async def _create_with_retry(self, **kwargs: Any) -> Any:
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            try:
+                return await self._client.chat.completions.create(**kwargs)
+            except (openai.RateLimitError, openai.InternalServerError) as exc:
+                delay = _retry_delay(exc, attempt)
+                if attempt == _MAX_ATTEMPTS or delay > _MAX_WAIT_S:
+                    raise
+                await _sleep(delay)
+        raise AssertionError("unreachable")
+
     def compute_cost(self, usage: TokenUsage) -> float | None:
         """None when this model has no price on file — never a guess."""
         price = self._price or lookup(self._model)
         return price.cost(usage) if price else None
+
+
+def _retry_delay(exc: openai.APIStatusError, attempt: int) -> float:
+    """The wait the server asked for, else exponential backoff from 5s."""
+    match = _RETRY_AFTER.search(str(exc.body) + str(exc))
+    if match:
+        return float(match.group(1)) + 1.0
+    return min(5.0 * 2.0 ** (attempt - 1), 60.0)
 
 
 def _billed_output_tokens(usage: CompletionUsage) -> int:
