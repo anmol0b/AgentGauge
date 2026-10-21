@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from agentbench.sandbox.docker_executor import DockerSandboxExecutor
+from agentgauge.sandbox.docker_executor import DockerSandboxExecutor
 from tests.fakes import host_path
 
 pytestmark = pytest.mark.docker
@@ -20,7 +20,7 @@ _daemon_up = (
 async def test_docker_executor_round_trip(tmp_path):
     (tmp_path / "f.txt").write_text("data\n")
     executor = DockerSandboxExecutor()
-    handle = await executor.start(host_path(tmp_path), image="agentbench-base:py3.12")
+    handle = await executor.start(host_path(tmp_path), image="agentgauge-base:py3.12")
     try:
         result = await executor.exec(handle, ["cat", "f.txt"], timeout_s=30)
         assert result.exit_code == 0 and result.stdout == "data\n"

@@ -1,7 +1,7 @@
 """Debug: run the agent loop against a live model with an in-memory executor,
 printing every turn. No Docker needed.
 
-Usage: .venv/bin/python scripts/debug_loop.py ollama/agentbench-qwen
+Usage: .venv/bin/python scripts/debug_loop.py ollama/agentgauge-qwen
 """
 
 import asyncio
@@ -10,11 +10,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agentbench.agent_loop.loop import DEFAULT_SYSTEM_PROMPT, run_agent_loop
-from agentbench.providers import make_provider
-from agentbench.sandbox.executor import ExecResult, SandboxHandle
+from agentgauge.agent_loop.loop import DEFAULT_SYSTEM_PROMPT, run_agent_loop
+from agentgauge.providers import make_provider
+from agentgauge.sandbox.executor import ExecResult, SandboxHandle
 
-FIXTURES = Path(__file__).parent.parent / "agentbench/tasks/fixtures/calc_repo"
+FIXTURES = Path(__file__).parent.parent / "agentgauge/tasks/fixtures/calc_repo"
 CALC = (FIXTURES / "calc.py").read_text()
 TEST = (FIXTURES / "test_calc.py").read_text()
 
@@ -57,7 +57,7 @@ class PrintingExecutor:
 
 
 async def main() -> None:
-    model = sys.argv[1] if len(sys.argv) > 1 else "ollama/agentbench-qwen"
+    model = sys.argv[1] if len(sys.argv) > 1 else "ollama/agentgauge-qwen"
     provider = make_provider(model, system=DEFAULT_SYSTEM_PROMPT)
     executor = PrintingExecutor()
     result = await run_agent_loop(

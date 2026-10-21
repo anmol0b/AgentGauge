@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
-from agentbench.models.provider import Message, ToolSpec
-from agentbench.providers.anthropic_provider import AnthropicProvider
-from agentbench.providers.openai_provider import OpenAIProvider
+from agentgauge.models.provider import Message, ToolSpec
+from agentgauge.providers.anthropic_provider import AnthropicProvider
+from agentgauge.providers.openai_provider import OpenAIProvider
 
 TOOLS = [ToolSpec(name="read_file", description="d", parameters={"type": "object"})]
 MESSAGES = [Message(role="user", content="fix it")]
@@ -164,6 +164,184 @@ async def test_openai_tolerates_a_response_without_usage():
 
     result = await provider.run_agent_turn(MESSAGES, TOOLS)
     assert result.usage.tokens_in == 0 and result.stop_reason == "end_turn"
+
+
+async def test_openai_echoes_a_tool_calls_thought_signature_next_turn():
+    """Gemini 3 rejects turn two with a 400 unless the signature comes back.
+
+    The response is a real one from Gemini's compatible endpoint (signature
+    shortened), parsed by the SDK itself: extra_content is not in its schema,
+    so this checks the field survives parsing as well as the round trip.
+    """
+    from openai.types.chat import ChatCompletion
+
+    response = ChatCompletion.model_validate(
+        {
+            "id": "743YarDWHNWJjuMPvI-ZuAE",
+            "object": "chat.completion",
+            "created": 1792577008,
+            "model": "gemini-3.5-flash",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "id": "call_958686",
+                                "type": "function",
+                                "function": {
+                                    "name": "read_file",
+                                    "arguments": '{"path":"src/app.py"}',
+                                },
+                                "extra_content": {"google": {"thought_signature": "EuEBCt4B"}},
+                            }
+                        ],
+                    },
+                }
+            ],
+            "usage": {"completion_tokens": 20, "prompt_tokens": 49, "total_tokens": 109},
+        }
+    )
+    provider = OpenAIProvider("gemini-3.5-flash", api_key="t")
+    fake = _openai(provider, response)
+    first = await provider.run_agent_turn(MESSAGES, TOOLS)
+
+    history = [
+        *MESSAGES,
+        *first.messages,
+        Message(role="tool", tool_call_id="call_958686", content="def add(a, b): ..."),
+    ]
+    await provider.run_agent_turn(history, TOOLS)
+
+    sent_call = fake.kwargs["messages"][1]["tool_calls"][0]
+    assert sent_call["extra_content"] == {"google": {"thought_signature": "EuEBCt4B"}}
+    assert first.usage.tokens_out == 60
+
+
+async def test_openai_sends_no_extra_content_for_a_plain_tool_call():
+    """Strict OpenAI-compatible servers may reject an unknown field."""
+    call = SimpleNamespace(
+        id="call_1",
+        type="function",
+        function=SimpleNamespace(name="read_file", arguments="{}"),
+    )
+    provider = OpenAIProvider("gpt-4o", api_key="t")
+    fake = _openai(provider, _openai_response(None, [call], "tool_calls"))
+    first = await provider.run_agent_turn(MESSAGES, TOOLS)
+
+    await provider.run_agent_turn([*MESSAGES, *first.messages], TOOLS)
+    assert "extra_content" not in fake.kwargs["messages"][1]["tool_calls"][0]
+
+
+async def test_openai_counts_thinking_left_out_of_completion_tokens():
+    """Gemini reports thinking only in total_tokens, and bills it as output."""
+    provider = OpenAIProvider("gemini-3.6-flash", api_key="t")
+    response = _openai_response("Hi there, friend!", None, "stop")
+    response.usage = SimpleNamespace(prompt_tokens=7, completion_tokens=5, total_tokens=255)
+    _openai(provider, response)
+
+    usage = (await provider.run_agent_turn(MESSAGES, TOOLS)).usage
+    assert usage.tokens_in == 7 and usage.tokens_out == 248
+
+
+async def test_openai_does_not_double_count_reasoning_already_in_completion():
+    """OpenAI's completion_tokens already includes reasoning."""
+    provider = OpenAIProvider("o3-mini", api_key="t")
+    response = _openai_response("done", None, "stop")
+    response.usage = SimpleNamespace(prompt_tokens=80, completion_tokens=20, total_tokens=100)
+    _openai(provider, response)
+
+    assert (await provider.run_agent_turn(MESSAGES, TOOLS)).usage.tokens_out == 20
+
+
+def _api_error(status: int, retry_delay: str | None = None) -> Exception:
+    """An SDK error shaped like Gemini's: the body is a one-element list."""
+    import httpx2
+    import openai
+
+    details = [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": retry_delay}]
+    body = [{"error": {"code": status, "details": details if retry_delay else []}}]
+    response = httpx2.Response(status, request=httpx2.Request("POST", "https://example.test"))
+    if status == 429:
+        return openai.RateLimitError("quota", response=response, body=body)
+    return openai.InternalServerError("high demand", response=response, body=body)
+
+
+class FlakyCompletions:
+    """Raises each queued error once, then returns the response."""
+
+    def __init__(self, errors: list[Exception], response: Any) -> None:
+        self._errors = list(errors)
+        self._response = response
+        self.calls = 0
+
+    async def create(self, **kwargs: Any) -> Any:
+        self.calls += 1
+        if self._errors:
+            raise self._errors.pop(0)
+        return self._response
+
+
+@pytest.fixture
+def sleeps(monkeypatch) -> list[float]:
+    waited: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        waited.append(seconds)
+
+    monkeypatch.setattr("agentgauge.providers.openai_provider._sleep", fake_sleep)
+    return waited
+
+
+def _flaky(provider: OpenAIProvider, errors: list[Exception]) -> FlakyCompletions:
+    fake = FlakyCompletions(errors, _openai_response("done", None, "stop"))
+    provider._client = SimpleNamespace(  # type: ignore[assignment]
+        chat=SimpleNamespace(completions=fake)
+    )
+    return fake
+
+
+async def test_a_rate_limit_waits_as_long_as_the_server_asks(sleeps):
+    provider = OpenAIProvider("gemini-3.6-flash", api_key="t")
+    fake = _flaky(provider, [_api_error(429, "38s")])
+
+    result = await provider.run_agent_turn(MESSAGES, TOOLS)
+    assert result.stop_reason == "end_turn" and fake.calls == 2
+    assert sleeps == [39.0]
+
+
+async def test_an_overload_without_a_delay_backs_off(sleeps):
+    provider = OpenAIProvider("gemini-3.6-flash", api_key="t")
+    _flaky(provider, [_api_error(503), _api_error(503)])
+
+    await provider.run_agent_turn(MESSAGES, TOOLS)
+    assert sleeps == [5.0, 10.0]
+
+
+async def test_a_daily_quota_fails_at_once_instead_of_waiting(sleeps):
+    import openai
+
+    provider = OpenAIProvider("gemini-3.6-flash", api_key="t")
+    _flaky(provider, [_api_error(429, "3600s")])
+
+    with pytest.raises(openai.RateLimitError):
+        await provider.run_agent_turn(MESSAGES, TOOLS)
+    assert sleeps == []
+
+
+async def test_retries_are_bounded(sleeps):
+    import openai
+
+    from agentgauge.providers.openai_provider import _MAX_ATTEMPTS
+
+    provider = OpenAIProvider("gemini-3.6-flash", api_key="t")
+    fake = _flaky(provider, [_api_error(503) for _ in range(_MAX_ATTEMPTS)])
+
+    with pytest.raises(openai.InternalServerError):
+        await provider.run_agent_turn(MESSAGES, TOOLS)
+    assert fake.calls == _MAX_ATTEMPTS
 
 
 @pytest.mark.parametrize(

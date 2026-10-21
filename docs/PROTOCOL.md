@@ -1,12 +1,12 @@
 # Sandbox executor protocol v2.0
 
-AgentBench runs untrusted, model-generated code inside a sandbox. Everything
+AgentGauge runs untrusted, model-generated code inside a sandbox. Everything
 it needs from that sandbox goes through one narrow interface, so the sandbox
 can be implemented in any language without touching evaluation logic.
 
 This document specifies the wire form. The in-process Python form is
-`agentbench.sandbox.executor.SandboxExecutor`; the serializable types are in
-`agentbench/sandbox/protocol.py`.
+`agentgauge.sandbox.executor.SandboxExecutor`; the serializable types are in
+`agentgauge/sandbox/protocol.py`.
 
 **The normative definition of correct behaviour is `tests/conformance/`.**
 This document describes the shape of the messages; the suite defines what the
@@ -98,7 +98,7 @@ are for the executor failing, not the sandboxed program.
 
 ```json
 {"repo": {"kind": "host_path", "path": "/tmp/x/repo"},
- "image": "agentbench-base:py3.12",
+ "image": "agentgauge-base:py3.12",
  "policy": {"mem_limit": "2g", "nano_cpus": 1000000000,
             "pids_limit": 256, "network_mode": "none"}}
 → {"handle": {"id": "…", "workdir": "/repo"}}
@@ -201,6 +201,6 @@ that no implementation honoured. Nothing had been released at 1.0.
 3. Run `pytest tests/conformance/` against it by adding an entry to
    `IMPLEMENTATIONS` in `tests/conformance/conftest.py`.
 
-The suite is the specification. If it passes, AgentBench can use your
+The suite is the specification. If it passes, AgentGauge can use your
 executor; if it does not, the gap is real even when this document seems to
 allow it.

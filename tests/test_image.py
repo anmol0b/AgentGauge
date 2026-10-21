@@ -1,4 +1,4 @@
-"""The sandbox image: the published default, pulling it, and `agentbench image build`."""
+"""The sandbox image: the published default, pulling it, and `agentgauge image build`."""
 
 import subprocess
 from types import SimpleNamespace
@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import docker.errors
 import pytest
 
-from agentbench import cli
-from agentbench.sandbox.docker_executor import ImageUnavailable, ensure_image
-from agentbench.sandbox.image import (
+from agentgauge import cli
+from agentgauge.sandbox.docker_executor import ImageUnavailable, ensure_image
+from agentgauge.sandbox.image import (
     DEFAULT_IMAGE,
     IMAGE_DIGEST,
     IMAGE_REPOSITORY,
@@ -56,7 +56,7 @@ def test_build_without_docker_says_so(monkeypatch):
 
 def test_image_build_subcommand_tags_the_local_image(monkeypatch, capsys):
     calls = _fake_docker(monkeypatch)
-    monkeypatch.setattr("sys.argv", ["agentbench", "image", "build"])
+    monkeypatch.setattr("sys.argv", ["agentgauge", "image", "build"])
     cli.main()
     assert calls[0][0][3] == LOCAL_IMAGE
     assert f"--image {LOCAL_IMAGE}" in capsys.readouterr().out
@@ -64,7 +64,7 @@ def test_image_build_subcommand_tags_the_local_image(monkeypatch, capsys):
 
 def test_image_build_failure_exits_with_the_reason(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda name: None)
-    monkeypatch.setattr("sys.argv", ["agentbench", "image", "build"])
+    monkeypatch.setattr("sys.argv", ["agentgauge", "image", "build"])
     with pytest.raises(SystemExit, match="docker command is not on PATH"):
         cli.main()
 
@@ -75,7 +75,7 @@ def test_image_build_failure_exits_with_the_reason(monkeypatch):
 def test_the_default_image_is_pinned_by_digest(monkeypatch):
     assert DEFAULT_IMAGE.startswith(f"{IMAGE_REPOSITORY}@sha256:")
     assert len(IMAGE_DIGEST) == len("sha256:") + 64
-    monkeypatch.setattr("sys.argv", ["agentbench", "--tasks", "t.yaml", "--model", "m"])
+    monkeypatch.setattr("sys.argv", ["agentgauge", "--tasks", "t.yaml", "--model", "m"])
     assert cli.parse_args().image == DEFAULT_IMAGE
 
 
@@ -101,7 +101,7 @@ def _fake_client(monkeypatch, images, ping_error=None):
             raise ping_error
 
     client = SimpleNamespace(ping=ping, images=images)
-    monkeypatch.setattr("agentbench.sandbox.docker_executor.from_env", lambda: client)
+    monkeypatch.setattr("agentgauge.sandbox.docker_executor.from_env", lambda: client)
 
 
 def test_a_present_image_is_not_pulled(monkeypatch):
@@ -125,7 +125,7 @@ def test_a_failed_pull_says_why_and_how_to_build_instead(monkeypatch):
         ensure_image("ghcr.io/x/y@sha256:abc")
     message = str(err.value)
     assert "ghcr.io/x/y@sha256:abc" in message and "requested access is forbidden" in message
-    assert "agentbench image build" in message and f"--image {LOCAL_IMAGE}" in message
+    assert "agentgauge image build" in message and f"--image {LOCAL_IMAGE}" in message
 
 
 def test_no_daemon_is_reported_as_such(monkeypatch):
@@ -138,7 +138,7 @@ def test_the_cli_exits_with_the_pull_error_before_running_anything(monkeypatch, 
     tasks = tmp_path / "t.yaml"
     tasks.write_text("tasks: []\n")
     _fake_client(monkeypatch, _FakeImages(set(), pull_error=docker.errors.NotFound("gone")))
-    monkeypatch.setattr("sys.argv", ["agentbench", "--tasks", str(tasks), "--model", "m"])
+    monkeypatch.setattr("sys.argv", ["agentgauge", "--tasks", str(tasks), "--model", "m"])
     monkeypatch.setattr(cli, "make_executor", pytest.fail)
     with pytest.raises(SystemExit, match="cannot pull the sandbox image"):
         cli.main()

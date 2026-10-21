@@ -6,7 +6,7 @@ without __init__ and exercise the pure decision logic.
 
 import threading
 
-from agentbench.sandbox.docker_executor import (
+from agentgauge.sandbox.docker_executor import (
     _HOST_TIMEOUT_GRACE_S,
     _TIMEOUT_EXIT_CODES,
     DockerSandboxExecutor,
@@ -63,11 +63,11 @@ def test_kill_exit_codes_are_recognised():
 
 
 def test_relative_paths_resolve_against_the_workdir():
-    from agentbench.sandbox.docker_executor import _absolute
-    from agentbench.sandbox.protocol import SandboxHandle
+    from agentgauge.sandbox.docker_executor import _absolute
+    from agentgauge.sandbox.protocol import SandboxHandle
 
     handle = SandboxHandle(id="c1", workdir="/repo")
     assert _absolute(handle, "calc.py") == "/repo/calc.py"
     assert _absolute(handle, "pkg/mod.py") == "/repo/pkg/mod.py"
     # absolute paths are left alone: the junit report is written to /tmp
-    assert _absolute(handle, "/tmp/agentbench-junit.xml") == "/tmp/agentbench-junit.xml"
+    assert _absolute(handle, "/tmp/agentgauge-junit.xml") == "/tmp/agentgauge-junit.xml"

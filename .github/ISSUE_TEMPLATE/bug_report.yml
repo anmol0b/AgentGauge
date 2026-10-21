@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         For anything exploitable, please open a
-        [private security advisory](https://github.com/anmol0b/PersonaFit/security/advisories/new)
+        [private security advisory](https://github.com/anmol0b/AgentGauge/security/advisories/new)
         instead. See `docs/SECURITY.md`.
 
   - type: textarea
@@ -47,7 +47,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: "Output of: `agentbench --version; python -V; docker --version; uname -sm`"
+      description: "Output of: `agentgauge --version; python -V; docker --version; uname -sm`"
       render: shell
     validations:
       required: true
@@ -58,4 +58,4 @@ body:
       label: Anything else
       description: |
         Useful when relevant: the run's `stop_reason`, whether the run errored or
-        failed, executor logs (`AGENTBENCH_LOG=debug`), the report row.
+        failed, executor logs (`AGENTGAUGE_LOG=debug`), the report row.

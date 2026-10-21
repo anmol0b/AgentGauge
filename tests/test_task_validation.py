@@ -9,7 +9,7 @@ input-validation boundary rather than a formality. See docs/SECURITY.md.
 import pytest
 from pydantic import ValidationError
 
-from agentbench.models.task import Task
+from agentgauge.models.task import Task
 
 BASE = {
     "id": "t",
@@ -31,7 +31,7 @@ def task(**overrides) -> Task:
         "ssh://git@github.com/example/repo.git",
         "git@github.com:example/repo.git",  # scp-style
         "file:///srv/mirrors/repo.git",
-        "agentbench/tasks/fixtures/calc_repo",  # local path
+        "agentgauge/tasks/fixtures/calc_repo",  # local path
         "/abs/path/to/repo",
     ],
 )
@@ -89,7 +89,7 @@ def test_fix_ref_is_never_shown_to_the_agent():
     worth asserting rather than assuming."""
     import inspect
 
-    from agentbench.orchestrator import runner
+    from agentgauge.orchestrator import runner
 
     assert "fix_ref" not in inspect.getsource(runner._instruction)
 
@@ -98,7 +98,7 @@ def test_the_clone_refuses_the_ext_transport_and_ends_options():
     """Second layer, in case a Task is constructed some other way."""
     import inspect
 
-    from agentbench.orchestrator import runner
+    from agentgauge.orchestrator import runner
 
     source = inspect.getsource(runner._materialize_repo)
     assert "protocol.ext.allow=never" in source
@@ -108,7 +108,7 @@ def test_the_clone_refuses_the_ext_transport_and_ends_options():
 def test_pointing_a_task_at_another_repo_rederives_repo_id():
     """repo_id is what runs are grouped by, so carrying the old one files
     every run under a repository the task is no longer using."""
-    original = task(repo_url="agentbench/tasks/fixtures/calc_repo")
+    original = task(repo_url="agentgauge/tasks/fixtures/calc_repo")
     assert original.repo_id == "calc_repo"
 
     moved = original.pointed_at("https://github.com/other/thing.git")

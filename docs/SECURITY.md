@@ -1,6 +1,6 @@
 # Security
 
-AgentBench runs code written by a language model, and runs test suites from
+AgentGauge runs code written by a language model, and runs test suites from
 repositories it was pointed at. That is the product, not an accident, so the
 question is not whether untrusted code executes — it does — but what that
 code can reach.
@@ -13,7 +13,7 @@ are weaker than they look.
 Open a [private security advisory][advisory] on the repository. Please do not
 open a public issue for anything exploitable.
 
-[advisory]: https://github.com/anmol0b/PersonaFit/security/advisories/new
+[advisory]: https://github.com/anmol0b/AgentGauge/security/advisories/new
 
 ## What is trusted, and what is not
 
@@ -35,7 +35,7 @@ Agent commands run in a container with:
 - **no network** (`network_mode=none`) — this is the main containment, and the
   reason a compromised agent cannot phone home or fetch a payload. The agent
   loop calls model APIs from the *host*, so the sandbox never needs egress.
-- memory, CPU and PID limits (`agentbench/sandbox/policy.py`)
+- memory, CPU and PID limits (`agentgauge/sandbox/policy.py`)
 - a per-run container, removed at teardown
 
 **A container is not a security boundary against a determined attacker.** It
@@ -56,7 +56,7 @@ Before any sandbox exists, `_materialize_repo` acts on the task file's
 local path. A hostile task file is therefore closer to arbitrary code
 execution than to configuration.
 
-What is validated at load (`agentbench/models/task.py`):
+What is validated at load (`agentgauge/models/task.py`):
 
 - `repo_url` may not begin with `-`, which git reads as an option
 - `repo_url` transports are limited to https, http, ssh, git and file;
@@ -84,7 +84,7 @@ edge in the tool, and it gets sharper the moment task sets are shared.
 ## API keys
 
 Read from environment variables only, held in process memory, and never
-written to the database, the HTML report or any log. `agentbench.db` stores
+written to the database, the HTML report or any log. `agentgauge.db` stores
 run metadata only. The sandbox has no network and never sees a key.
 
 ## The HTML report
@@ -97,7 +97,7 @@ domain where a mistake would be costly.
 
 ## Executor binaries
 
-`--executor auto` resolves a binary from `$AGENTBENCH_EXECUTOR`, the installed
+`--executor auto` resolves a binary from `$AGENTGAUGE_EXECUTOR`, the installed
 package, `PATH`, then `rust/target`. An attacker who can write to any of those
 controls the sandbox. That is the same trust model as any tool that finds
 helpers on `PATH`; it is listed here because the executor is the component

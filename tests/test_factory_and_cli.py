@@ -2,10 +2,10 @@
 
 import pytest
 
-from agentbench.cli import parse_args
-from agentbench.providers import make_provider
-from agentbench.providers.anthropic_provider import AnthropicProvider
-from agentbench.providers.openai_provider import OpenAIProvider
+from agentgauge.cli import parse_args
+from agentgauge.providers import make_provider
+from agentgauge.providers.anthropic_provider import AnthropicProvider
+from agentgauge.providers.openai_provider import OpenAIProvider
 
 
 def test_claude_models_route_to_anthropic(monkeypatch):
@@ -23,9 +23,26 @@ def test_ollama_models_need_no_key_and_cost_nothing(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     provider = make_provider("ollama/qwen2.5-coder")
     assert isinstance(provider, OpenAIProvider)
-    from agentbench.models.run import TokenUsage
+    from agentgauge.models.run import TokenUsage
 
     assert provider.compute_cost(TokenUsage(tokens_in=10**6, tokens_out=10**6)) == 0.0
+
+
+def test_gemini_models_route_to_googles_compatible_endpoint(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    provider = make_provider("gemini-3.6-flash")
+    assert isinstance(provider, OpenAIProvider)
+    assert str(provider._client.base_url).startswith("https://generativelanguage.googleapis.com/")
+
+
+def test_gemini_without_a_published_price_reports_no_cost(monkeypatch):
+    """gemini-3.5-flash must not borrow 3.5-flash-lite's rate by prefix."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    from agentgauge.models.run import TokenUsage
+
+    usage = TokenUsage(tokens_in=10**6, tokens_out=10**6)
+    assert make_provider("gemini-3.5-flash").compute_cost(usage) is None
+    assert make_provider("gemini-3.6-flash").compute_cost(usage) == 4.5
 
 
 def test_unknown_model_is_rejected():
@@ -40,7 +57,7 @@ def test_missing_key_is_reported_by_name(monkeypatch):
 
 
 def _args(argv, monkeypatch):
-    monkeypatch.setattr("sys.argv", ["agentbench", *argv])
+    monkeypatch.setattr("sys.argv", ["agentgauge", *argv])
     return parse_args()
 
 
@@ -77,38 +94,38 @@ class _FakeDocker:
 
 @pytest.fixture
 def no_daemon(monkeypatch):
-    monkeypatch.setattr("agentbench.sandbox.docker_executor.DockerSandboxExecutor", _FakeDocker)
+    monkeypatch.setattr("agentgauge.sandbox.docker_executor.DockerSandboxExecutor", _FakeDocker)
 
 
 def _binary(monkeypatch, path):
-    monkeypatch.setattr("agentbench.cli.find_executor_binary", lambda: path)
+    monkeypatch.setattr("agentgauge.cli.find_executor_binary", lambda: path)
 
 
 def test_auto_prefers_the_binary_when_one_exists(monkeypatch, no_daemon, tmp_path):
-    from agentbench.cli import make_executor
-    from agentbench.sandbox.subprocess_executor import SubprocessExecutor
+    from agentgauge.cli import make_executor
+    from agentgauge.sandbox.subprocess_executor import SubprocessExecutor
 
-    _binary(monkeypatch, tmp_path / "agentbench-executord")
+    _binary(monkeypatch, tmp_path / "agentgauge-executord")
     assert isinstance(make_executor("auto"), SubprocessExecutor)
 
 
 def test_auto_falls_back_to_python_with_no_binary(monkeypatch, no_daemon):
-    from agentbench.cli import make_executor
+    from agentgauge.cli import make_executor
 
     _binary(monkeypatch, None)
     assert isinstance(make_executor("auto"), _FakeDocker)
 
 
 def test_python_is_used_even_when_a_binary_exists(monkeypatch, no_daemon, tmp_path):
-    from agentbench.cli import make_executor
+    from agentgauge.cli import make_executor
 
-    _binary(monkeypatch, tmp_path / "agentbench-executord")
+    _binary(monkeypatch, tmp_path / "agentgauge-executord")
     assert isinstance(make_executor("python"), _FakeDocker)
 
 
 def test_rust_without_a_binary_says_how_to_get_one(monkeypatch, no_daemon):
     """Silently falling back would hide that the choice was not honoured."""
-    from agentbench.cli import make_executor
+    from agentgauge.cli import make_executor
 
     _binary(monkeypatch, None)
     with pytest.raises(RuntimeError, match="cargo build"):

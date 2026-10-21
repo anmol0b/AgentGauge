@@ -5,10 +5,10 @@ is the scheduling, not a single run.
 import asyncio
 from typing import Any
 
-from agentbench.models.provider import Message, ProviderResponse, ToolSpec
-from agentbench.models.run import RunResult, TokenUsage
-from agentbench.models.task import Task
-from agentbench.orchestrator.harness import run_benchmark
+from agentgauge.models.provider import Message, ProviderResponse, ToolSpec
+from agentgauge.models.run import RunResult, TokenUsage
+from agentgauge.models.task import Task
+from agentgauge.orchestrator.harness import run_benchmark
 from tests.fakes import FakeExecutor
 
 
@@ -51,7 +51,7 @@ def _record_calls(monkeypatch, calls: list[dict[str, Any]], hook=None):
             await hook()
         return _result(task.id, model, run_index)
 
-    monkeypatch.setattr("agentbench.orchestrator.harness.run_once", fake_run_once)
+    monkeypatch.setattr("agentgauge.orchestrator.harness.run_once", fake_run_once)
 
 
 async def test_fans_out_over_tasks_models_and_repeats(monkeypatch):
@@ -99,7 +99,7 @@ async def test_providers_are_built_once_per_model(monkeypatch):
         built.append(model)
         return StubProvider()
 
-    monkeypatch.setattr("agentbench.orchestrator.harness.make_provider", record)
+    monkeypatch.setattr("agentgauge.orchestrator.harness.make_provider", record)
     _record_calls(monkeypatch, [])
 
     await run_benchmark(
@@ -141,7 +141,7 @@ async def test_missing_api_key_fails_before_any_run(monkeypatch):
     def explode(model, system=None):
         raise RuntimeError("ANTHROPIC_API_KEY is not set")
 
-    monkeypatch.setattr("agentbench.orchestrator.harness.make_provider", explode)
+    monkeypatch.setattr("agentgauge.orchestrator.harness.make_provider", explode)
     calls: list[dict[str, Any]] = []
     _record_calls(monkeypatch, calls)
 
@@ -163,8 +163,8 @@ async def test_missing_api_key_fails_before_any_run(monkeypatch):
 
 def test_progress_sink_reports_the_latest_line(capsys):
     """A five-minute test run showing nothing is indistinguishable from a hang."""
-    from agentbench.orchestrator.harness import _progress_sink
-    from agentbench.sandbox.protocol import OutputChunk
+    from agentgauge.orchestrator.harness import _progress_sink
+    from agentgauge.sandbox.protocol import OutputChunk
 
     sink = _progress_sink("task | model | run 1/3", interval_s=0)
     sink(OutputChunk(kind="stdout", data="collected 5 items\ntests/test_a.py .\n"))
@@ -177,8 +177,8 @@ def test_progress_sink_reports_the_latest_line(capsys):
 def test_progress_sink_throttles(capsys):
     """Relaying a test suite's output verbatim, times four concurrent runs,
     would be unreadable."""
-    from agentbench.orchestrator.harness import _progress_sink
-    from agentbench.sandbox.protocol import OutputChunk
+    from agentgauge.orchestrator.harness import _progress_sink
+    from agentgauge.sandbox.protocol import OutputChunk
 
     sink = _progress_sink("label", interval_s=60)
     for i in range(10):
@@ -188,8 +188,8 @@ def test_progress_sink_throttles(capsys):
 
 
 def test_progress_sink_ignores_blank_output(capsys):
-    from agentbench.orchestrator.harness import _progress_sink
-    from agentbench.sandbox.protocol import OutputChunk
+    from agentgauge.orchestrator.harness import _progress_sink
+    from agentgauge.sandbox.protocol import OutputChunk
 
     sink = _progress_sink("label", interval_s=0)
     sink(OutputChunk(kind="stdout", data="\n   \n"))
@@ -201,8 +201,8 @@ def test_progress_sink_reports_immediately_on_a_freshly_booted_machine(capsys, m
     """time.monotonic() counts from an arbitrary point. Treating 0.0 as
     "never printed" suppressed the first line for interval_s seconds after
     boot — invisible on a laptop with days of uptime, and caught by CI."""
-    from agentbench.orchestrator import harness
-    from agentbench.sandbox.protocol import OutputChunk
+    from agentgauge.orchestrator import harness
+    from agentgauge.sandbox.protocol import OutputChunk
 
     # patch the stdlib function harness calls, not an attribute of harness
     monkeypatch.setattr("time.monotonic", lambda: 0.5)

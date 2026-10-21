@@ -8,8 +8,8 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from agentbench.sandbox.docker_executor import DockerSandboxExecutor
-from agentbench.sandbox.protocol import HostPathRepo
+from agentgauge.sandbox.docker_executor import DockerSandboxExecutor
+from agentgauge.sandbox.protocol import HostPathRepo
 
 
 async def main() -> None:

@@ -15,6 +15,11 @@ Nothing has been released yet. 0.1.0 will be the first tag.
 
 ### Added
 
+- **Gemini models.** `--model gemini-*` with `GEMINI_API_KEY`, through
+  Google's OpenAI-compatible endpoint. Thinking tokens, which that endpoint
+  leaves out of `completion_tokens`, are counted as output, and Gemini 3's
+  per-call `thought_signature` is sent back on the following turn.
+
 - **Rust sandbox executor.** A three-crate workspace (`rust/`) implementing
   the executor protocol over Docker, plus a Python client that speaks it to
   any conforming binary. `--executor {auto,rust,python}` selects one; `auto`
@@ -22,21 +27,21 @@ Nothing has been released yet. 0.1.0 will be the first tag.
 - **An executor contract.** `docs/PROTOCOL.md` specifies the wire form and
   `tests/conformance/` is its normative definition — every implementation is
   held to the same suite.
-- **Packaging.** Published to PyPI as `agentbench-ai` (`agentbench` is
-  taken); the command and import stay `agentbench`. maturin builds the Rust
-  binary into its own wheel (`agentbench-executord`), which `agentbench-ai`
+- **Packaging.** Published to PyPI as `agentgauge`, the same name as the
+  command and the import. maturin builds the Rust
+  binary into its own wheel (`agentgauge-executord`), which `agentgauge`
   depends on for macOS and Linux, so `pip install` brings the binary with no
   Rust toolchain. Wheels cover macOS arm64/x86_64 and Linux x86_64/aarch64 on
   glibc and musl. Each tag publishes to PyPI by trusted publishing and to a
   GitHub Release with standalone binaries and `SHA256SUMS`, after installing
   every wheel in a clean environment on its platform.
 - **A published sandbox image.** `--image` defaults to
-  `ghcr.io/anmol0b/agentbench-base`, pinned by digest and pulled on first
+  `ghcr.io/anmol0b/agentgauge-base`, pinned by digest and pulled on first
   use, so an install runs tasks with no checkout. A release refuses to
   publish unless that digest is public and built from the Dockerfile it
-  ships. Where the registry cannot be reached, `agentbench image build`
+  ships. Where the registry cannot be reached, `agentgauge image build`
   builds the same image from the Dockerfile, which now ships in the package
-  (`agentbench/sandbox/base.Dockerfile`, formerly `docker/base.Dockerfile`).
+  (`agentgauge/sandbox/base.Dockerfile`, formerly `docker/base.Dockerfile`).
   An image that cannot be pulled, or a Docker daemon that is not running, is
   one error before any run starts.
 - **A sandbox benchmark** (`bench/sandbox_bench.py`) and its first results

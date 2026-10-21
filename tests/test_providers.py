@@ -1,12 +1,12 @@
 """Provider message-conversion and pricing tests (no network calls)."""
 
-from agentbench.models.provider import Message, ToolCall
-from agentbench.models.run import TokenUsage
-from agentbench.providers.anthropic_provider import (
+from agentgauge.models.provider import Message, ToolCall
+from agentgauge.models.run import TokenUsage
+from agentgauge.providers.anthropic_provider import (
     AnthropicProvider,
     _to_anthropic_messages,
 )
-from agentbench.providers.openai_provider import (
+from agentgauge.providers.openai_provider import (
     OpenAIProvider,
     _to_openai_messages,
     _tool_call_from_content,

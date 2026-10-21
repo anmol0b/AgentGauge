@@ -1,9 +1,6 @@
 [project]
-# "agentbench" is taken on PyPI, and the product may be renamed. This is the
-# only place the distribution name lives: the command, the import package and
-# the binary are all still "agentbench". A rename publishes the new name and
-# then a last release of this one that depends on it.
-name = "agentbench-ai"
+# The distribution, the command and the import package share one name.
+name = "agentgauge"
 # Must match rust/Cargo.toml and the release tag; release.yml checks all three.
 version = "0.1.0"
 description = "AI-friendliness benchmark: run coding agents against real repo tasks in Docker sandboxes"
@@ -30,7 +27,7 @@ dependencies = [
     # pinning exactly — the handshake refuses a major version it doesn't know,
     # and an exact pin would break every dev install between a version bump
     # and its release.
-    "agentbench-executord>=0.1,<0.2; sys_platform == 'darwin' or sys_platform == 'linux'",
+    "agentgauge-executord>=0.1,<0.2; sys_platform == 'darwin' or sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
@@ -44,21 +41,21 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/anmol0b/PersonaFit"
-Changelog = "https://github.com/anmol0b/PersonaFit/blob/main/CHANGELOG.md"
+Repository = "https://github.com/anmol0b/AgentGauge"
+Changelog = "https://github.com/anmol0b/AgentGauge/blob/main/CHANGELOG.md"
 
 [project.scripts]
-agentbench = "agentbench.cli:main"
+agentgauge = "agentgauge.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["agentbench*"]
+include = ["agentgauge*"]
 
 [tool.setuptools.package-data]
-agentbench = ["providers/pricing.yaml", "tasks/*.yaml", "sandbox/base.Dockerfile"]
+agentgauge = ["providers/pricing.yaml", "tasks/*.yaml", "sandbox/base.Dockerfile"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -69,7 +66,7 @@ addopts = "--strict-markers --strict-config"
 
 [tool.coverage.run]
 branch = true
-source = ["agentbench"]
+source = ["agentgauge"]
 
 [tool.coverage.report]
 # The offline suite reaches ~78% branch coverage. docker_executor.py is ~14%
@@ -92,7 +89,7 @@ line-length = 100
 target-version = "py312"
 # Fixture repos are benchmark inputs, not project code: they contain seeded
 # bugs on purpose, and `ruff check --fix` could quietly repair one.
-extend-exclude = ["agentbench/tasks/fixtures"]
+extend-exclude = ["agentgauge/tasks/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
@@ -104,9 +101,9 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["agentbench", "tests", "scripts"]
+files = ["agentgauge", "tests", "scripts"]
 # Fixture repos are benchmark inputs with deliberate bugs, not project code.
-exclude = "agentbench/tasks/fixtures/"
+exclude = "agentgauge/tasks/fixtures/"
 strict = true
 warn_unreachable = true
 
@@ -130,5 +127,5 @@ disallow_untyped_calls = false
 # The single file allowed to touch the docker SDK, which is untyped: calls
 # into it cannot be checked, so that one rule is relaxed here rather than
 # globally.
-module = "agentbench.sandbox.docker_executor"
+module = "agentgauge.sandbox.docker_executor"
 disallow_untyped_calls = false

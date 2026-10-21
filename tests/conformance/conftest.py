@@ -17,11 +17,11 @@ from typing import Any
 
 import pytest
 
-from agentbench.sandbox.discovery import find_executor_binary
-from agentbench.sandbox.protocol import SandboxHandle
+from agentgauge.sandbox.discovery import find_executor_binary
+from agentgauge.sandbox.protocol import SandboxHandle
 from tests.fakes import FakeExecutor, host_path
 
-DOCKER_IMAGE = "agentbench-base:py3.12"
+DOCKER_IMAGE = "agentgauge-base:py3.12"
 
 _daemon_up = (
     shutil.which("docker") is not None
@@ -42,7 +42,7 @@ class Implementation:
 
 
 def _docker() -> Any:
-    from agentbench.sandbox.docker_executor import DockerSandboxExecutor
+    from agentgauge.sandbox.docker_executor import DockerSandboxExecutor
 
     return DockerSandboxExecutor()
 
@@ -56,7 +56,7 @@ def _rust_binary() -> Any:
 
 
 def _rust() -> Any:
-    from agentbench.sandbox.subprocess_executor import SubprocessExecutor
+    from agentgauge.sandbox.subprocess_executor import SubprocessExecutor
 
     binary = _rust_binary()
     assert binary is not None  # guarded by the skipif below

@@ -1,8 +1,8 @@
 import sqlite3
 from typing import Any
 
-from agentbench.models.run import RunResult
-from agentbench.storage.db import RunStore
+from agentgauge.models.run import RunResult
+from agentgauge.storage.db import RunStore
 
 
 def _result(**overrides):
@@ -153,7 +153,7 @@ def test_v1_rows_get_zero_phase_timings(tmp_path):
 
 
 def test_transcript_round_trips(tmp_path):
-    from agentbench.models.run import ToolCallRecord, Transcript, TurnRecord
+    from agentgauge.models.run import ToolCallRecord, Transcript, TurnRecord
 
     transcript = Transcript(
         turns=[

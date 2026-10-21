@@ -3,7 +3,7 @@
 # silently losing the start of the conversation.
 #
 # Set FROM to whatever you actually pulled, then:
-#   ollama create agentbench-<name> -f ollama/Modelfile
-# and benchmark it as --model ollama/agentbench-<name>.
+#   ollama create agentgauge-<name> -f ollama/Modelfile
+# and benchmark it as --model ollama/agentgauge-<name>.
 FROM qwen2.5-coder:14b
 PARAMETER num_ctx 16384

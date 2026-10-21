@@ -12,13 +12,13 @@ venv=$(mktemp -d)/venv
 "$python" -m venv "$venv"
 # --find-links: the executor wheel may not be on PyPI yet, so it must come
 # from what this run built. Everything else resolves from PyPI as usual.
-"$venv/bin/pip" install --quiet --find-links "$dist" agentbench-ai
+"$venv/bin/pip" install --quiet --find-links "$dist" agentgauge
 
 cd "$(dirname "$venv")"  # away from any checkout, whose rust/target would win
-"$venv/bin/agentbench" --help > /dev/null
+"$venv/bin/agentgauge" --help > /dev/null
 "$venv/bin/python" - <<'PY'
 import subprocess
-from agentbench.sandbox.discovery import find_executor_binary
+from agentgauge.sandbox.discovery import find_executor_binary
 
 binary = find_executor_binary()
 assert binary is not None, "the executor wheel installed but discovery cannot find it"

@@ -16,13 +16,13 @@ from typing import Any
 
 import pytest
 
-from agentbench.sandbox.protocol import (
+from agentgauge.sandbox.protocol import (
     PROTOCOL_VERSION,
     HostPathRepo,
     OutputChunk,
     SandboxHandle,
 )
-from agentbench.sandbox.subprocess_executor import ExecutorProtocolError, SubprocessExecutor
+from agentgauge.sandbox.subprocess_executor import ExecutorProtocolError, SubprocessExecutor
 
 HANDLE = SandboxHandle(id="stub")
 STUB_SOURCE = Path(__file__).parent / "stub_executor.py"
@@ -37,7 +37,7 @@ def stub(tmp_path: Path, monkeypatch: Any) -> Callable[..., SubprocessExecutor]:
     def build(**script: Any) -> SubprocessExecutor:
         script_file = tmp_path / "script.json"
         script_file.write_text(json.dumps(script))
-        monkeypatch.setenv("AGENTBENCH_STUB_SCRIPT", str(script_file))
+        monkeypatch.setenv("AGENTGAUGE_STUB_SCRIPT", str(script_file))
 
         launcher = tmp_path / "stub-executor"
         launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{STUB_SOURCE}"\n')
@@ -159,7 +159,7 @@ async def test_an_executor_that_dies_fails_the_pending_call(stub, closing):
 
 
 async def test_a_binary_that_never_handshakes_is_rejected(stub, closing, monkeypatch):
-    monkeypatch.setattr("agentbench.sandbox.subprocess_executor._HANDSHAKE_TIMEOUT_S", 1)
+    monkeypatch.setattr("agentgauge.sandbox.subprocess_executor._HANDSHAKE_TIMEOUT_S", 1)
     executor = stub(never_handshake=True, silence_s=3)
     closing.append(executor)
 

@@ -1,9 +1,9 @@
 """Agent loop tests with a scripted fake provider + in-memory executor."""
 
-from agentbench.agent_loop.loop import run_agent_loop
-from agentbench.agent_loop.tools import execute_tool
-from agentbench.models.provider import Message, ProviderResponse, ToolCall
-from agentbench.models.run import TokenUsage
+from agentgauge.agent_loop.loop import run_agent_loop
+from agentgauge.agent_loop.tools import execute_tool
+from agentgauge.models.provider import Message, ProviderResponse, ToolCall
+from agentgauge.models.run import TokenUsage
 from tests.fakes import FakeExecutor, host_path
 
 

@@ -4,10 +4,10 @@ unpriced model must report nothing rather than a plausible-looking number.
 
 import pytest
 
-from agentbench.models.run import TokenUsage
-from agentbench.providers.anthropic_provider import AnthropicProvider
-from agentbench.providers.openai_provider import OpenAIProvider
-from agentbench.providers.pricing import Price, known_models, lookup
+from agentgauge.models.run import TokenUsage
+from agentgauge.providers.anthropic_provider import AnthropicProvider
+from agentgauge.providers.openai_provider import OpenAIProvider
+from agentgauge.providers.pricing import Price, known_models, lookup
 
 ONE_M = TokenUsage(tokens_in=1_000_000, tokens_out=1_000_000)
 
