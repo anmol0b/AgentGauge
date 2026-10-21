@@ -124,3 +124,21 @@ tasks:
     failing_test_command: "PYTHONPATH=src pytest tests/test_tlru.py -k test_overwrite_existing_with_expired"
     full_test_command: "PYTHONPATH=src pytest tests/"
     difficulty: medium
+
+  # interpose over an empty sequence let a bare next() raise StopIteration
+  # out of the function instead of yielding nothing. The easy anchor of the
+  # set: one call site, a clear symptom.
+  #
+  # test_has_version reads installed package metadata, and the sandbox runs
+  # toolz from source, so it always fails there; it is deselected rather than
+  # left to look like a pre-existing break.
+  - id: toolz-interpose-empty
+    repo_url: https://github.com/pytoolz/toolz.git
+    repo_id: toolz
+    repo_ref: 55ce42dc3b6f786ed9d4e38633cc5cfe3622a526
+    fix_ref: d2eba0374a452c2b18fe188b04527e22bda3548c
+    setup_commands:
+      - "git checkout d2eba0374a452c2b18fe188b04527e22bda3548c -- toolz/tests/test_itertoolz.py"
+    failing_test_command: "pytest toolz/tests/test_itertoolz.py::test_interpose_empty"
+    full_test_command: "pytest toolz/tests/ --deselect toolz/tests/test_package.py::test_has_version"
+    difficulty: easy
