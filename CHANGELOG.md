@@ -15,6 +15,10 @@ Nothing has been released yet. 0.1.0 will be the first tag.
 
 ### Added
 
+- **Five more real-repo tasks**, from more-itertools, cachetools and toolz,
+  so the real set is seven tasks across four repositories instead of two
+  from one. Each is verified in CI against an actual clone.
+
 - **Replay tests for provider responses.** Real Gemini responses recorded
   during live runs, and OpenAI/Anthropic responses built from their SDK
   schemas, run through parsing, the loop and pricing with no API key.
