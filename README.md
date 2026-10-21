@@ -148,8 +148,9 @@ failing test and breaks two passing ones.
 
 They are toy repos, so a high pass rate on them is not evidence a model is good at
 real codebases. `agentgauge/tasks/real_repos.yaml` holds tasks built from real
-upstream bugs — pinned at the commit before each fix, with the fix's test restored.
-Its header documents how to add more.
+upstream bugs — seven, from boltons, more-itertools, cachetools and toolz —
+pinned at the commit before each fix, with the fix's test restored. Its header
+documents how to add more.
 
 Every real task is verified in CI against an actual clone: the declared test must
 fail at the pinned commit, and applying the upstream fix must make it pass. A task

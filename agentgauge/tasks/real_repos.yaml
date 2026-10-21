@@ -23,9 +23,11 @@
 # model at zero (or at one).
 #
 # These need network at clone time (host-side) and the standard sandbox image.
-# boltons has no runtime dependencies, which is why no task-specific image is
-# needed; a repo with dependencies would need one, since the sandbox has no
-# network to install them at run time.
+# Every repo here has no runtime dependencies and imports from its checkout
+# (with PYTHONPATH=src for a src layout), which is why no task-specific image
+# is needed; a repo with dependencies would need one, since the sandbox has no
+# network to install them at run time. full_test_command must run in that
+# image too: it is the baseline regressions are measured against.
 
 tasks:
   # A typo — `issupserset` for `issuperset` — in _ComplementSet's <= and >=.
@@ -61,3 +63,84 @@ tasks:
     failing_test_command: "pytest tests/test_listutils.py::test_barrellist_delete_across_multiple_barrels"
     full_test_command: "pytest tests/"
     difficulty: hard
+
+  # bucket's cache was a defaultdict, so merely asking about a key — `in`, or
+  # a [] lookup that finds nothing — created it, and iterating the bucket then
+  # reported keys the input never produced. The fix is small; seeing that a
+  # read can mutate is the hard part.
+  - id: more-itertools-bucket-phantom-keys
+    repo_url: https://github.com/more-itertools/more-itertools.git
+    repo_id: more-itertools
+    repo_ref: b2f3aff7633057d234ec9186c18a53f4df306d08
+    fix_ref: 3ea9b009b19db0e01a83d51cee43e9935c0d657f
+    setup_commands:
+      - "git checkout 3ea9b009b19db0e01a83d51cee43e9935c0d657f -- tests/test_more.py"
+    failing_test_command: "pytest tests/test_more.py::BucketTests"
+    full_test_command: "pytest tests/"
+    difficulty: medium
+
+  # numeric_range with an inexact step (floats, 0.1): membership and len()
+  # computed by division disagreed with the items iteration produces by
+  # repeated addition, at the boundary. Needs the insight that the count must
+  # be settled against the generated items, not the arithmetic.
+  - id: more-itertools-numeric-range-inexact
+    repo_url: https://github.com/more-itertools/more-itertools.git
+    repo_id: more-itertools
+    repo_ref: 30ada7dd597316a3ef967911477e0a1d9f55eefe
+    fix_ref: bc8be1013ac90fe3c1df8aae646b02605d578818
+    setup_commands:
+      - "git checkout bc8be1013ac90fe3c1df8aae646b02605d578818 -- tests/test_more.py"
+    failing_test_command: "pytest tests/test_more.py::NumericRangeTests"
+    full_test_command: "pytest tests/"
+    difficulty: hard
+
+  # Replacing a key with a larger value evicted as if the whole new value
+  # were being added, not just the growth — so the cache dropped entries it
+  # had room for. The new tests live in the shared mixin in tests/__init__.py
+  # and run for every cache class.
+  #
+  # cachetools commits to its default branch directly, so the fix is a
+  # first-parent commit rather than a PR merge; it is the whole change.
+  # src layout: the package is importable only with src on the path.
+  - id: cachetools-replace-over-evicts
+    repo_url: https://github.com/tkem/cachetools.git
+    repo_id: cachetools
+    repo_ref: 16e88894ef7d79b25a68f5a3b5411ed881342725
+    fix_ref: 39b31bc9b63abe98497409945e9d382d8918c8fb
+    setup_commands:
+      - "git checkout 39b31bc9b63abe98497409945e9d382d8918c8fb -- tests/__init__.py"
+    failing_test_command: "PYTHONPATH=src pytest tests/ -k test_getsizeof_replace"
+    full_test_command: "PYTHONPATH=src pytest tests/"
+    difficulty: medium
+
+  # Assigning an already-expired value to a TLRUCache key skipped the store
+  # but left the key's previous value in place, so the assignment was
+  # silently ignored and a stale value kept being served.
+  - id: cachetools-tlru-overwrite-expired
+    repo_url: https://github.com/tkem/cachetools.git
+    repo_id: cachetools
+    repo_ref: 978d34d40cdbf3b4cbfce104f3166032cc4ea028
+    fix_ref: fcbb0de97fc09de646d2e210def765d07dee66e8
+    setup_commands:
+      - "git checkout fcbb0de97fc09de646d2e210def765d07dee66e8 -- tests/test_tlru.py"
+    failing_test_command: "PYTHONPATH=src pytest tests/test_tlru.py -k test_overwrite_existing_with_expired"
+    full_test_command: "PYTHONPATH=src pytest tests/"
+    difficulty: medium
+
+  # interpose over an empty sequence let a bare next() raise StopIteration
+  # out of the function instead of yielding nothing. The easy anchor of the
+  # set: one call site, a clear symptom.
+  #
+  # test_has_version reads installed package metadata, and the sandbox runs
+  # toolz from source, so it always fails there; it is deselected rather than
+  # left to look like a pre-existing break.
+  - id: toolz-interpose-empty
+    repo_url: https://github.com/pytoolz/toolz.git
+    repo_id: toolz
+    repo_ref: 55ce42dc3b6f786ed9d4e38633cc5cfe3622a526
+    fix_ref: d2eba0374a452c2b18fe188b04527e22bda3548c
+    setup_commands:
+      - "git checkout d2eba0374a452c2b18fe188b04527e22bda3548c -- toolz/tests/test_itertoolz.py"
+    failing_test_command: "pytest toolz/tests/test_itertoolz.py::test_interpose_empty"
+    full_test_command: "pytest toolz/tests/ --deselect toolz/tests/test_package.py::test_has_version"
+    difficulty: easy
