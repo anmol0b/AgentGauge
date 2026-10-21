@@ -61,3 +61,33 @@ tasks:
     failing_test_command: "pytest tests/test_listutils.py::test_barrellist_delete_across_multiple_barrels"
     full_test_command: "pytest tests/"
     difficulty: hard
+
+  # bucket's cache was a defaultdict, so merely asking about a key — `in`, or
+  # a [] lookup that finds nothing — created it, and iterating the bucket then
+  # reported keys the input never produced. The fix is small; seeing that a
+  # read can mutate is the hard part.
+  - id: more-itertools-bucket-phantom-keys
+    repo_url: https://github.com/more-itertools/more-itertools.git
+    repo_id: more-itertools
+    repo_ref: b2f3aff7633057d234ec9186c18a53f4df306d08
+    fix_ref: 3ea9b009b19db0e01a83d51cee43e9935c0d657f
+    setup_commands:
+      - "git checkout 3ea9b009b19db0e01a83d51cee43e9935c0d657f -- tests/test_more.py"
+    failing_test_command: "pytest tests/test_more.py::BucketTests"
+    full_test_command: "pytest tests/"
+    difficulty: medium
+
+  # numeric_range with an inexact step (floats, 0.1): membership and len()
+  # computed by division disagreed with the items iteration produces by
+  # repeated addition, at the boundary. Needs the insight that the count must
+  # be settled against the generated items, not the arithmetic.
+  - id: more-itertools-numeric-range-inexact
+    repo_url: https://github.com/more-itertools/more-itertools.git
+    repo_id: more-itertools
+    repo_ref: 30ada7dd597316a3ef967911477e0a1d9f55eefe
+    fix_ref: bc8be1013ac90fe3c1df8aae646b02605d578818
+    setup_commands:
+      - "git checkout bc8be1013ac90fe3c1df8aae646b02605d578818 -- tests/test_more.py"
+    failing_test_command: "pytest tests/test_more.py::NumericRangeTests"
+    full_test_command: "pytest tests/"
+    difficulty: hard
