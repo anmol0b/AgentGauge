@@ -74,6 +74,10 @@ compare a run against an older one — `agentbench/sandbox/base.Dockerfile` and
 
 - Anthropic: `export ANTHROPIC_API_KEY=...`, use `--model claude-sonnet-5`
 - OpenAI: `export OPENAI_API_KEY=...`, use `--model gpt-4o`
+- Gemini (free tier available): `export GEMINI_API_KEY=...`, use
+  `--model gemini-3.6-flash`. Runs through Google's OpenAI-compatible
+  endpoint. A free key is rate-limited, so use `--concurrency 1`; the reported
+  cost is what the run would cost on a paid key.
 - Ollama (free, local, no key): pull a model, set `FROM` in `ollama/Modelfile` to
   match, `ollama create agentbench-qwen -f ollama/Modelfile`, then
   `--model ollama/agentbench-qwen`. The Modelfile exists to raise Ollama's default

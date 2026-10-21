@@ -15,6 +15,11 @@ Nothing has been released yet. 0.1.0 will be the first tag.
 
 ### Added
 
+- **Gemini models.** `--model gemini-*` with `GEMINI_API_KEY`, through
+  Google's OpenAI-compatible endpoint. Thinking tokens, which that endpoint
+  leaves out of `completion_tokens`, are counted as output, and Gemini 3's
+  per-call `thought_signature` is sent back on the following turn.
+
 - **Rust sandbox executor.** A three-crate workspace (`rust/`) implementing
   the executor protocol over Docker, plus a Python client that speaks it to
   any conforming binary. `--executor {auto,rust,python}` selects one; `auto`
