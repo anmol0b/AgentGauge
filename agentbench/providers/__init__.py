@@ -9,6 +9,8 @@ from agentbench.providers.base import ModelProvider
 from agentbench.providers.openai_provider import OpenAIProvider
 from agentbench.providers.pricing import lookup
 
+_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
 
 def make_provider(model: str, system: str | None = None) -> ModelProvider:
     if model.startswith("claude"):
@@ -24,7 +26,17 @@ def make_provider(model: str, system: str | None = None) -> ModelProvider:
         )
     if model.startswith(("gpt", "o1", "o3", "o4")):
         return OpenAIProvider(model, api_key=_require_env("OPENAI_API_KEY"), system=system)
-    raise ValueError(f"no provider for model {model!r} (expected claude-*, gpt-*, or ollama/*)")
+    if model.startswith("gemini"):
+        # Google's OpenAI-compatible endpoint, which has a free tier.
+        return OpenAIProvider(
+            model,
+            api_key=_require_env("GEMINI_API_KEY"),
+            system=system,
+            base_url=_GEMINI_BASE_URL,
+        )
+    raise ValueError(
+        f"no provider for model {model!r} (expected claude-*, gpt-*, gemini-*, or ollama/*)"
+    )
 
 
 def _require_env(name: str) -> str:

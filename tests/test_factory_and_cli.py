@@ -28,6 +28,23 @@ def test_ollama_models_need_no_key_and_cost_nothing(monkeypatch):
     assert provider.compute_cost(TokenUsage(tokens_in=10**6, tokens_out=10**6)) == 0.0
 
 
+def test_gemini_models_route_to_googles_compatible_endpoint(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    provider = make_provider("gemini-3.6-flash")
+    assert isinstance(provider, OpenAIProvider)
+    assert str(provider._client.base_url).startswith("https://generativelanguage.googleapis.com/")
+
+
+def test_gemini_without_a_published_price_reports_no_cost(monkeypatch):
+    """gemini-3.5-flash must not borrow 3.5-flash-lite's rate by prefix."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    from agentbench.models.run import TokenUsage
+
+    usage = TokenUsage(tokens_in=10**6, tokens_out=10**6)
+    assert make_provider("gemini-3.5-flash").compute_cost(usage) is None
+    assert make_provider("gemini-3.6-flash").compute_cost(usage) == 4.5
+
+
 def test_unknown_model_is_rejected():
     with pytest.raises(ValueError, match="no provider for model"):
         make_provider("llama-3-70b")
