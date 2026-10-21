@@ -15,6 +15,10 @@ Nothing has been released yet. 0.1.0 will be the first tag.
 
 ### Added
 
+- **Five more real-repo tasks**, from more-itertools, cachetools and toolz,
+  so the real set is seven tasks across four repositories instead of two
+  from one. Each is verified in CI against an actual clone.
+
 - **Gemini models.** `--model gemini-*` with `GEMINI_API_KEY`, through
   Google's OpenAI-compatible endpoint. Thinking tokens, which that endpoint
   leaves out of `completion_tokens`, are counted as output, and Gemini 3's

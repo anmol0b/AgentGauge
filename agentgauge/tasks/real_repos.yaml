@@ -23,9 +23,11 @@
 # model at zero (or at one).
 #
 # These need network at clone time (host-side) and the standard sandbox image.
-# boltons has no runtime dependencies, which is why no task-specific image is
-# needed; a repo with dependencies would need one, since the sandbox has no
-# network to install them at run time.
+# Every repo here has no runtime dependencies and imports from its checkout
+# (with PYTHONPATH=src for a src layout), which is why no task-specific image
+# is needed; a repo with dependencies would need one, since the sandbox has no
+# network to install them at run time. full_test_command must run in that
+# image too: it is the baseline regressions are measured against.
 
 tasks:
   # A typo — `issupserset` for `issuperset` — in _ComplementSet's <= and >=.
