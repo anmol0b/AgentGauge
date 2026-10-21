@@ -13,7 +13,7 @@ no Rust and no API keys**, and it is what gates every pull request.
 Two optional extras, only if you are touching what they cover:
 
 ```sh
-.venv/bin/agentbench image build           # the sandbox image
+.venv/bin/agentgauge image build           # the sandbox image
 .venv/bin/pytest tests/ -m docker          # the sandbox, for real
 
 cd rust && cargo build --release           # the Rust executor
@@ -33,10 +33,10 @@ Everything below runs on every pull request, and all of it can be run locally:
 .venv/bin/pytest tests/ -m "not docker"    # with a coverage floor
 ```
 
-`mypy` runs `strict` over `agentbench`, and a notch below over tests and
+`mypy` runs `strict` over `agentgauge`, and a notch below over tests and
 scripts — a fake's signature is documented by the protocol it stands in for.
 
-Fixture repositories under `agentbench/tasks/fixtures/` are excluded from
+Fixture repositories under `agentgauge/tasks/fixtures/` are excluded from
 both ruff and mypy. They contain deliberate bugs, and a `--fix` run that
 quietly repaired one would turn a benchmark task into a free pass.
 
@@ -44,12 +44,12 @@ quietly repaired one would turn a benchmark task into a free pass.
 
 Two seams carry most of the design:
 
-- **`SandboxExecutor`** (`agentbench/sandbox/executor.py`) is the only way
+- **`SandboxExecutor`** (`agentgauge/sandbox/executor.py`) is the only way
   orchestration touches a container runtime. `docs/PROTOCOL.md` is its wire
   form; `tests/conformance/` is the normative definition of correct
   behaviour. Adding an executor means adding one entry to `IMPLEMENTATIONS`
   in `tests/conformance/conftest.py` and making the suite pass.
-- **`ModelProvider`** (`agentbench/providers/base.py`) is the only way the
+- **`ModelProvider`** (`agentgauge/providers/base.py`) is the only way the
   agent loop touches a model API.
 
 Changing behaviour at either seam means changing the contract, which means
@@ -74,7 +74,7 @@ changing the tests that define it. That is the intended friction.
 
 ## Adding a model
 
-Add an entry to `agentbench/providers/pricing.yaml` and route it in
+Add an entry to `agentgauge/providers/pricing.yaml` and route it in
 `make_provider`. A model with no price reports **no cost at all** rather than
 a figure derived from another model's rate — please do not add a fallback
 that guesses.

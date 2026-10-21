@@ -3,11 +3,11 @@
 version = 4
 
 [[package]]
-name = "agentbench-executord"
+name = "agentgauge-executord"
 version = "0.1.0"
 dependencies = [
- "agentbench-protocol",
- "agentbench-sandbox",
+ "agentgauge-protocol",
+ "agentgauge-sandbox",
  "anyhow",
  "base64",
  "clap",
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "agentbench-protocol"
+name = "agentgauge-protocol"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -27,10 +27,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "agentbench-sandbox"
+name = "agentgauge-sandbox"
 version = "0.1.0"
 dependencies = [
- "agentbench-protocol",
+ "agentgauge-protocol",
  "anyhow",
  "bollard",
  "futures-util",

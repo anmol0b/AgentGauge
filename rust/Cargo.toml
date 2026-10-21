@@ -6,7 +6,7 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/anmol0b/PersonaFit"
+repository = "https://github.com/anmol0b/AgentGauge"
 
 [workspace.dependencies]
 anyhow = "1"

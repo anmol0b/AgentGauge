@@ -2,11 +2,11 @@
 in-memory fake and the provider is monkeypatched at its construction site.
 """
 
-from agentbench.models.provider import Message, ProviderResponse, ToolCall
-from agentbench.models.run import TokenUsage
-from agentbench.models.task import Task
-from agentbench.orchestrator.runner import _is_test_path, run_once
-from agentbench.sandbox.executor import ExecResult, SandboxHandle
+from agentgauge.models.provider import Message, ProviderResponse, ToolCall
+from agentgauge.models.run import TokenUsage
+from agentgauge.models.task import Task
+from agentgauge.orchestrator.runner import _is_test_path, run_once
+from agentgauge.sandbox.executor import ExecResult, SandboxHandle
 
 _JUNIT = """<?xml version="1.0"?>
 <testsuites><testsuite name="pytest">
@@ -141,7 +141,7 @@ async def test_run_once_reports_harness_errors(tmp_path, monkeypatch):
     def explode(model, system=None):
         raise RuntimeError("no api key")
 
-    monkeypatch.setattr("agentbench.orchestrator.runner.make_provider", explode)
+    monkeypatch.setattr("agentgauge.orchestrator.runner.make_provider", explode)
     executor = ScriptedExecutor()
     result = await run_once(_task(tmp_path), 0, "fake-model", executor)
 
@@ -249,7 +249,7 @@ async def test_stale_junit_report_is_deleted_before_each_pass(tmp_path, monkeypa
 
 import subprocess  # noqa: E402
 
-from agentbench.orchestrator.runner import _materialize_repo  # noqa: E402
+from agentgauge.orchestrator.runner import _materialize_repo  # noqa: E402
 
 
 def _git(cwd, *args):
@@ -333,7 +333,7 @@ async def test_phases_after_a_failure_stay_zero(tmp_path, monkeypatch):
     def explode(model, system=None):
         raise RuntimeError("no api key")
 
-    monkeypatch.setattr("agentbench.orchestrator.runner.make_provider", explode)
+    monkeypatch.setattr("agentgauge.orchestrator.runner.make_provider", explode)
     result = await run_once(_task(tmp_path), 0, "fake-model", ScriptedExecutor())
 
     assert result.error is not None
@@ -360,7 +360,7 @@ async def test_a_run_that_errors_before_the_loop_has_no_transcript(tmp_path, mon
     def explode(model, system=None):
         raise RuntimeError("no api key")
 
-    monkeypatch.setattr("agentbench.orchestrator.runner.make_provider", explode)
+    monkeypatch.setattr("agentgauge.orchestrator.runner.make_provider", explode)
     result = await run_once(_task(tmp_path), 0, "fake-model", ScriptedExecutor())
 
     assert result.error is not None

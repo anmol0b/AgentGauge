@@ -1,6 +1,6 @@
-from agentbench.models.report import AggregateReport, VarianceReport
-from agentbench.models.run import RunResult
-from agentbench.models.task import Task, TaskSet
+from agentgauge.models.report import AggregateReport, VarianceReport
+from agentgauge.models.run import RunResult
+from agentgauge.models.task import Task, TaskSet
 
 
 def test_task_round_trip():

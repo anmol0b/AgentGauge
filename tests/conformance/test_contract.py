@@ -11,7 +11,7 @@ import asyncio
 
 import pytest
 
-from agentbench.sandbox.protocol import OutputChunk
+from agentgauge.sandbox.protocol import OutputChunk
 
 from .conftest import Sandbox
 

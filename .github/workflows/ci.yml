@@ -16,7 +16,7 @@ permissions:
 env:
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  # agentbench-ai depends on the agentbench-executord wheel. Installing it
+  # agentgauge depends on the agentgauge-executord wheel. Installing it
   # from this run's own build rather than PyPI means CI tests the branch's
   # executor, and works for a version that has not been released yet.
   PIP_FIND_LINKS: wheels
@@ -31,7 +31,7 @@ jobs:
         with:
           manylinux: auto
           sccache: true
-          args: --release --out wheels -m rust/crates/agentbench-executord/Cargo.toml
+          args: --release --out wheels -m rust/crates/agentgauge-executord/Cargo.toml
       - uses: actions/upload-artifact@v4
         with:
           name: executor-wheel
@@ -101,7 +101,7 @@ jobs:
       # -W error: a DeprecationWarning from a dependency is a problem to fix
       # now, not after it becomes a breakage.
       - name: pytest
-        run: pytest tests/ -m "not docker" -W error --cov=agentbench --cov-report=term-missing
+        run: pytest tests/ -m "not docker" -W error --cov=agentgauge --cov-report=term-missing
 
   rust:
     name: Rust lint and tests
@@ -150,7 +150,7 @@ jobs:
       - name: Require a Docker daemon
         run: docker info
       - name: Build the sandbox image
-        run: agentbench image build
+        run: agentgauge image build
       # The one test that needs a daemon. It is skipped on laptops, so without
       # this job the Docker executor — the component that actually isolates
       # untrusted agent output — would never be exercised anywhere.
@@ -177,5 +177,5 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: pip install -e ".[dev]" pip-audit
-      # --skip-editable: agentbench itself is not on PyPI to audit against.
+      # --skip-editable: agentgauge itself is not on PyPI to audit against.
       - run: pip-audit --skip-editable --progress-spinner=off

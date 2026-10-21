@@ -18,5 +18,9 @@ rust/target/
 .DS_Store
 
 # demo artifacts (regenerable)
-agentbench.db
+agentgauge.db
 report.html
+
+# local build and run output
+wheels/
+report-*.html

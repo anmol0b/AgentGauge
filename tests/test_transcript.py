@@ -5,7 +5,7 @@ provider or a container. Every limit here discards information, and each test
 below is really asking the same question: *does it say what it dropped?*
 """
 
-from agentbench.agent_loop.transcript import (
+from agentgauge.agent_loop.transcript import (
     MAX_ARG_CHARS,
     MAX_TEXT_CHARS,
     MAX_TRANSCRIPT_CHARS,
@@ -13,7 +13,7 @@ from agentbench.agent_loop.transcript import (
     OUTPUT_TAIL_CHARS,
     compact_transcript,
 )
-from agentbench.models.provider import Message, ToolCall
+from agentgauge.models.provider import Message, ToolCall
 
 
 def assistant(text="", calls=()):

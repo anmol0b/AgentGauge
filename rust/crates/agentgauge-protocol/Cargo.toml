@@ -1,0 +1,11 @@
+[package]
+name = "agentgauge-protocol"
+description = "Wire types for the AgentGauge sandbox executor protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

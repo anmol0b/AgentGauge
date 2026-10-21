@@ -24,12 +24,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agentbench.models.task import Task, TaskSet
-from agentbench.orchestrator.runner import SETUP_TIMEOUT_S, TEST_TIMEOUT_S, _materialize_repo
-from agentbench.sandbox.protocol import HostPathRepo
+from agentgauge.models.task import Task, TaskSet
+from agentgauge.orchestrator.runner import SETUP_TIMEOUT_S, TEST_TIMEOUT_S, _materialize_repo
+from agentgauge.sandbox.protocol import HostPathRepo
 
-TASKS_FILE = Path(__file__).parent.parent / "agentbench" / "tasks" / "real_repos.yaml"
-IMAGE = "agentbench-base:py3.12"
+TASKS_FILE = Path(__file__).parent.parent / "agentgauge" / "tasks" / "real_repos.yaml"
+IMAGE = "agentgauge-base:py3.12"
 
 _daemon_up = (
     shutil.which("docker") is not None
@@ -57,7 +57,7 @@ def test_every_real_task_pins_its_provenance():
 @pytest.mark.skipif(not _daemon_up, reason="Docker daemon not available")
 @pytest.mark.parametrize("task", _tasks(), ids=_ids(_tasks()))
 async def test_the_task_fails_and_the_upstream_fix_resolves_it(task: Task, tmp_path: Path):
-    from agentbench.sandbox.docker_executor import DockerSandboxExecutor
+    from agentgauge.sandbox.docker_executor import DockerSandboxExecutor
 
     repo = _materialize_repo(task.repo_url, tmp_path, task.repo_ref)
     executor = DockerSandboxExecutor()

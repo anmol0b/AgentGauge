@@ -25,23 +25,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agentbench.sandbox.discovery import find_executor_binary  # noqa: E402
-from agentbench.sandbox.protocol import HostPathRepo  # noqa: E402
+from agentgauge.sandbox.discovery import find_executor_binary  # noqa: E402
+from agentgauge.sandbox.protocol import HostPathRepo  # noqa: E402
 
-IMAGE = "agentbench-base:py3.12"
+IMAGE = "agentgauge-base:py3.12"
 BLOB = b"x" * 64 * 1024
 
 
 def build_executor(name: str):
     if name == "python":
-        from agentbench.sandbox.docker_executor import DockerSandboxExecutor
+        from agentgauge.sandbox.docker_executor import DockerSandboxExecutor
 
         return DockerSandboxExecutor()
 
     binary = find_executor_binary()
     if binary is None:
         raise SystemExit("no executor binary; run `cargo build --release` in rust/")
-    from agentbench.sandbox.subprocess_executor import SubprocessExecutor
+    from agentgauge.sandbox.subprocess_executor import SubprocessExecutor
 
     return SubprocessExecutor(binary)
 

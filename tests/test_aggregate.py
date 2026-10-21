@@ -1,7 +1,7 @@
 import pytest
 
-from agentbench.models.run import RunResult
-from agentbench.reporting.aggregate import aggregate, comparable_repos
+from agentgauge.models.run import RunResult
+from agentgauge.reporting.aggregate import aggregate, comparable_repos
 
 
 def _run(

@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from agentbench.sandbox.policy import SandboxPolicy
-from agentbench.sandbox.protocol import (
+from agentgauge.sandbox.policy import SandboxPolicy
+from agentgauge.sandbox.protocol import (
     PROTOCOL_VERSION,
     ErrorObject,
     ExecParams,
@@ -49,12 +49,12 @@ def test_repo_source_is_tagged():
 def test_start_params_round_trip():
     params = StartParams(
         repo=HostPathRepo(path="/tmp/repo"),
-        image="agentbench-base:py3.12",
+        image="agentgauge-base:py3.12",
         policy=SandboxPolicy(),
     )
     wire = json.loads(params.model_dump_json())
     assert wire["repo"] == {"kind": "host_path", "path": "/tmp/repo"}
-    assert wire["image"] == "agentbench-base:py3.12"
+    assert wire["image"] == "agentgauge-base:py3.12"
     assert wire["policy"]["network_mode"] == "none"  # sandboxes have no egress
     assert StartParams(**wire) == params
 

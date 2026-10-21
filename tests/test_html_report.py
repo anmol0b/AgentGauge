@@ -1,8 +1,8 @@
 from typing import Any
 
-from agentbench.models.run import RunResult
-from agentbench.reporting.aggregate import aggregate
-from agentbench.reporting.html_report import render_html
+from agentgauge.models.run import RunResult
+from agentgauge.reporting.aggregate import aggregate
+from agentgauge.reporting.html_report import render_html
 
 
 def _run(**overrides):
@@ -134,7 +134,7 @@ def test_difficulty_mix_is_readable(tmp_path):
 
 
 def _transcript(**overrides):
-    from agentbench.models.run import ToolCallRecord, Transcript, TurnRecord
+    from agentgauge.models.run import ToolCallRecord, Transcript, TurnRecord
 
     base: dict[str, Any] = dict(
         turns=[
@@ -183,7 +183,7 @@ def test_report_says_how_many_turns_were_dropped(tmp_path):
 
 
 def test_report_distinguishes_not_recorded_from_empty(tmp_path):
-    from agentbench.models.run import Transcript
+    from agentgauge.models.run import Transcript
 
     missing = render_html(aggregate([_run(transcript=None)]), tmp_path / "a.html").read_text()
     empty = render_html(aggregate([_run(transcript=Transcript())]), tmp_path / "b.html").read_text()
@@ -194,7 +194,7 @@ def test_report_distinguishes_not_recorded_from_empty(tmp_path):
 
 
 def test_a_nudged_turn_is_flagged(tmp_path):
-    from agentbench.models.run import TurnRecord
+    from agentgauge.models.run import TurnRecord
 
     transcript = _transcript(turns=[TurnRecord(index=1, text="The fix is…", nudged=True)])
     html = render_html(aggregate([_run(transcript=transcript)]), tmp_path / "r.html").read_text()
@@ -204,7 +204,7 @@ def test_a_nudged_turn_is_flagged(tmp_path):
 
 def test_transcript_content_is_escaped(tmp_path):
     """Every string in a transcript was written by the model under test."""
-    from agentbench.models.run import ToolCallRecord, TurnRecord
+    from agentgauge.models.run import ToolCallRecord, TurnRecord
 
     transcript = _transcript(
         turns=[

@@ -18,10 +18,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agentbench.models.task import Task, TaskSet
+from agentgauge.models.task import Task, TaskSet
 
 REPO_ROOT = Path(__file__).parent.parent
-TASKS_FILE = REPO_ROOT / "agentbench" / "tasks" / "example.yaml"
+TASKS_FILE = REPO_ROOT / "agentgauge" / "tasks" / "example.yaml"
 
 # pytest's own exit codes
 TESTS_FAILED = 1
@@ -107,7 +107,7 @@ def test_only_declared_tests_fail_in_each_fixture(repo_id: str, tmp_path: Path):
 
 def test_every_fixture_repo_is_used_by_a_task():
     """An orphaned fixture is dead weight that still looks load-bearing."""
-    fixtures = {p.name for p in (REPO_ROOT / "agentbench/tasks/fixtures").iterdir() if p.is_dir()}
+    fixtures = {p.name for p in (REPO_ROOT / "agentgauge/tasks/fixtures").iterdir() if p.is_dir()}
     used = {t.repo_id for t in _local_tasks()}
     assert not fixtures - used, f"unused fixture repos: {sorted(fixtures - used)}"
 

@@ -12,8 +12,8 @@ import time
 
 import pytest
 
-from agentbench.agent_loop.tools import execute_tool
-from agentbench.sandbox.protocol import ExecResult, OutputChunk
+from agentgauge.agent_loop.tools import execute_tool
+from agentgauge.sandbox.protocol import ExecResult, OutputChunk
 from tests.fakes import FakeExecutor, host_path
 
 _daemon_up = (
@@ -73,10 +73,10 @@ async def test_output_is_not_duplicated_by_an_executor_that_also_buffers():
 async def test_chunks_arrive_before_the_command_finishes():
     """The property that matters, and the only one a fake cannot show: output
     is delivered while the command is still running."""
-    from agentbench.sandbox.docker_executor import DockerSandboxExecutor
+    from agentgauge.sandbox.docker_executor import DockerSandboxExecutor
 
     executor = DockerSandboxExecutor()
-    handle = await executor.start(host_path("."), "agentbench-base:py3.12")
+    handle = await executor.start(host_path("."), "agentgauge-base:py3.12")
     arrivals: list[float] = []
     started = time.monotonic()
     try:

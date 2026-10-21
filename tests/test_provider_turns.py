@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
-from agentbench.models.provider import Message, ToolSpec
-from agentbench.providers.anthropic_provider import AnthropicProvider
-from agentbench.providers.openai_provider import OpenAIProvider
+from agentgauge.models.provider import Message, ToolSpec
+from agentgauge.providers.anthropic_provider import AnthropicProvider
+from agentgauge.providers.openai_provider import OpenAIProvider
 
 TOOLS = [ToolSpec(name="read_file", description="d", parameters={"type": "object"})]
 MESSAGES = [Message(role="user", content="fix it")]
@@ -291,7 +291,7 @@ def sleeps(monkeypatch) -> list[float]:
     async def fake_sleep(seconds: float) -> None:
         waited.append(seconds)
 
-    monkeypatch.setattr("agentbench.providers.openai_provider._sleep", fake_sleep)
+    monkeypatch.setattr("agentgauge.providers.openai_provider._sleep", fake_sleep)
     return waited
 
 
@@ -334,7 +334,7 @@ async def test_a_daily_quota_fails_at_once_instead_of_waiting(sleeps):
 async def test_retries_are_bounded(sleeps):
     import openai
 
-    from agentbench.providers.openai_provider import _MAX_ATTEMPTS
+    from agentgauge.providers.openai_provider import _MAX_ATTEMPTS
 
     provider = OpenAIProvider("gemini-3.6-flash", api_key="t")
     fake = _flaky(provider, [_api_error(503) for _ in range(_MAX_ATTEMPTS)])

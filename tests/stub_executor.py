@@ -3,7 +3,7 @@
 Used by tests/test_subprocess_executor.py to exercise the client's half of
 the protocol — handshake checks, error mapping, stream events, an executor
 that dies — without a container runtime. Behaviour comes from a JSON file
-named by AGENTBENCH_STUB_SCRIPT:
+named by AGENTGAUGE_STUB_SCRIPT:
 
     {
       "handshake": {...},              # or omitted for a valid default
@@ -27,7 +27,7 @@ from typing import Any
 # drift out of date and start failing the version check for the wrong reason.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agentbench.sandbox.protocol import PROTOCOL_VERSION  # noqa: E402
+from agentgauge.sandbox.protocol import PROTOCOL_VERSION  # noqa: E402
 
 DEFAULT_HANDSHAKE = {
     "protocol_version": PROTOCOL_VERSION,
@@ -64,7 +64,7 @@ def read_message() -> dict[str, Any] | None:
 
 
 def main() -> None:
-    with open(os.environ["AGENTBENCH_STUB_SCRIPT"]) as handle:
+    with open(os.environ["AGENTGAUGE_STUB_SCRIPT"]) as handle:
         script = json.load(handle)
     if script.get("never_handshake"):
         # Sit silent so the client's handshake deadline is what fires.

@@ -5,7 +5,7 @@ and no API key.
 
 ## Rust vs Python executor
 
-Apple M-series, macOS, Docker Desktop 29.5.2, `agentbench-base:py3.12`,
+Apple M-series, macOS, Docker Desktop 29.5.2, `agentgauge-base:py3.12`,
 **5 iterations**, milliseconds.
 
 | operation | python median | python p90 | rust median | rust p90 | rust / python |

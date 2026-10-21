@@ -11,8 +11,8 @@ letting a fake pretend to have a shell.
 
 from pathlib import Path
 
-from agentbench.sandbox.policy import SandboxPolicy
-from agentbench.sandbox.protocol import (
+from agentgauge.sandbox.policy import SandboxPolicy
+from agentgauge.sandbox.protocol import (
     ExecResult,
     OutputChunk,
     OutputSink,
@@ -94,6 +94,6 @@ class FakeExecutor:
 
 def host_path(path: Path | str) -> RepoSource:
     """Shorthand for the one repo source kind that exists today."""
-    from agentbench.sandbox.protocol import HostPathRepo
+    from agentgauge.sandbox.protocol import HostPathRepo
 
     return HostPathRepo(path=str(path))

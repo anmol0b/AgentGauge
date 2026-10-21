@@ -1,6 +1,6 @@
-# PersonaFit
+# AgentGauge
 
-## AgentBench — AI-friendliness benchmark
+How well do AI coding agents work in your repository — and which model works best in it?
 
 A CLI that takes a repo + a set of "fix this failing test" tasks, runs an AI coding
 agent against each task inside an isolated Docker sandbox, and reports success rate,
@@ -8,18 +8,18 @@ tokens, cost, latency, tool-call count, and regressions — with N repeated runs
 task to report variance (LLM outputs are non-deterministic; variance is reported
 explicitly, never hidden).
 
-### Architecture
+## Architecture
 
 Orchestration never talks to Docker directly — all sandbox interaction goes through
-the `SandboxExecutor` protocol (`agentbench/sandbox/executor.py`), so the executor can
+the `SandboxExecutor` protocol (`agentgauge/sandbox/executor.py`), so the executor can
 be swapped (e.g. rewritten in Rust) without touching eval logic. Providers sit behind
-the `ModelProvider` protocol (`agentbench/providers/base.py`); Anthropic and OpenAI are
+the `ModelProvider` protocol (`agentgauge/providers/base.py`); Anthropic and OpenAI are
 two implementations of the same interface, plus OpenAI-compatible endpoints (Ollama,
 Groq, ...) via `base_url`. All cross-module data is typed Pydantic v2 models. API keys
 are read from env vars only, held in memory, never persisted.
 
 ```
-agentbench/
+agentgauge/
 ├── cli.py                 # entry point
 ├── models/                # Task, RunResult, VarianceReport, provider schemas
 ├── providers/             # ModelProvider protocol + anthropic/openai impls + pricing
@@ -31,35 +31,34 @@ agentbench/
 └── tasks/                 # YAML task definitions + fixture repos
 ```
 
-### Install
+## Install
 
 macOS and Linux, Python 3.12+, and a running Docker daemon:
 
 ```sh
-pip install agentbench-ai        # or: uv tool install agentbench-ai
+pip install agentgauge        # or: uv tool install agentgauge
 ```
 
-The distribution is `agentbench-ai` because `agentbench` is taken on PyPI; the
-command and the import are both `agentbench`. It pulls in the Rust sandbox
+The package, the command and the import are all `agentgauge`. It pulls in the Rust sandbox
 executor as a prebuilt wheel (macOS arm64/x86_64, Linux x86_64/aarch64, glibc
 or musl), so no Rust toolchain is needed. Each GitHub Release also carries the
-bare binaries with a `SHA256SUMS`, for setting `AGENTBENCH_EXECUTOR` by hand.
+bare binaries with a `SHA256SUMS`, for setting `AGENTGAUGE_EXECUTOR` by hand.
 
-Tasks run in a sandbox image, `ghcr.io/anmol0b/agentbench-base`, which the
+Tasks run in a sandbox image, `ghcr.io/anmol0b/agentgauge-base`, which the
 first run pulls. It is pinned by digest, so every install of a version runs in
 the same sandbox. Where that registry cannot be reached, build the same
 Dockerfile locally — it ships in the package — and point runs at it:
 
 ```sh
-agentbench image build             # tags agentbench-base:py3.12
-agentbench --image agentbench-base:py3.12 --tasks ... --model ...
+agentgauge image build             # tags agentgauge-base:py3.12
+agentgauge --image agentgauge-base:py3.12 --tasks ... --model ...
 ```
 
-### Development setup
+## Development setup
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-.venv/bin/agentbench image build   # agentbench-base:py3.12, for the docker tests
+.venv/bin/agentgauge image build   # agentgauge-base:py3.12, for the docker tests
 ```
 
 Sandboxed containers run with `network_mode=none` (the agent loop calls model APIs
@@ -67,10 +66,10 @@ from the host), so test dependencies must be baked into the image.
 
 The base image is pinned by digest and its pytest by version, and runs default
 to the published build pinned by digest. A benchmark whose sandbox drifts cannot
-compare a run against an older one — `agentbench/sandbox/base.Dockerfile` and
-`agentbench/sandbox/image.py` say how to update each pin deliberately.
+compare a run against an older one — `agentgauge/sandbox/base.Dockerfile` and
+`agentgauge/sandbox/image.py` say how to update each pin deliberately.
 
-### Models
+## Models
 
 - Anthropic: `export ANTHROPIC_API_KEY=...`, use `--model claude-sonnet-5`
 - OpenAI: `export OPENAI_API_KEY=...`, use `--model gpt-4o`
@@ -79,32 +78,32 @@ compare a run against an older one — `agentbench/sandbox/base.Dockerfile` and
   endpoint. A free key is rate-limited, so use `--concurrency 1`; the reported
   cost is what the run would cost on a paid key.
 - Ollama (free, local, no key): pull a model, set `FROM` in `ollama/Modelfile` to
-  match, `ollama create agentbench-qwen -f ollama/Modelfile`, then
-  `--model ollama/agentbench-qwen`. The Modelfile exists to raise Ollama's default
+  match, `ollama create agentgauge-qwen -f ollama/Modelfile`, then
+  `--model ollama/agentgauge-qwen`. The Modelfile exists to raise Ollama's default
   4096-token context, which is too small for an agent loop.
 
 One provider is built per model and shared across that model's runs, so a
 missing API key fails immediately rather than after every run has errored.
 
-Costs come from `agentbench/providers/pricing.yaml`. A model with no entry there
+Costs come from `agentgauge/providers/pricing.yaml`. A model with no entry there
 reports **no cost at all** rather than a figure guessed from another model's rate —
 add an entry when you benchmark a new model.
 
-### Run
+## Run
 
 ```sh
-.venv/bin/agentbench \
-  --tasks agentbench/tasks/example.yaml \
-  --model ollama/agentbench-qwen \
+.venv/bin/agentgauge \
+  --tasks agentgauge/tasks/example.yaml \
+  --model ollama/agentgauge-qwen \
   --runs-per-task 3 \
   --out report.html
 ```
 
-Results are appended to `agentbench.db` (SQLite). Each invocation gets a run-set id
+Results are appended to `agentgauge.db` (SQLite). Each invocation gets a run-set id
 and the report covers **only that invocation** — pass `--all-history` to aggregate
 every run in the database instead (which mixes separate sessions into one pass rate).
 
-### Scoring a repository, not just a model
+## Scoring a repository, not just a model
 
 Runs are grouped by `repo_id` as well as by model, so the report answers
 "how well do agents work *in this codebase*" and not only "which model is
@@ -118,7 +117,7 @@ Repositories evaluated against **different models are not compared**. The
 report says so instead of ranking them — otherwise a repo tested only with a
 weak model looks hostile to agents when the difference is the model.
 
-### Scoring rules
+## Scoring rules
 
 - **Pass rates carry a 95% confidence interval.** At N=3, three passes is not
   "100%" but "somewhere above ~44%". Overlapping intervals between two models mean
@@ -137,15 +136,15 @@ weak model looks hostile to agents when the difference is the model.
 - **Regressions come from a junit report**, which needs a pytest-compatible suite.
   Where it is missing or unparseable, runs read "not detected", not "none".
 
-### Tasks
+## Tasks
 
-`agentbench/tasks/example.yaml` holds seeded-bug tasks over local fixture repos —
+`agentgauge/tasks/example.yaml` holds seeded-bug tasks over local fixture repos —
 fast, offline, and useful for smoke-testing the harness. Difficulty runs from
 one-line fixes to `pagination-partial-page-bug`, where the obvious fix passes the
 failing test and breaks two passing ones.
 
 They are toy repos, so a high pass rate on them is not evidence a model is good at
-real codebases. `agentbench/tasks/real_repos.yaml` holds tasks built from real
+real codebases. `agentgauge/tasks/real_repos.yaml` holds tasks built from real
 upstream bugs — pinned at the commit before each fix, with the fix's test restored.
 Its header documents how to add more.
 
@@ -154,7 +153,7 @@ fail at the pinned commit, and applying the upstream fix must make it pass. A ta
 that is already solved, or that no fix resolves, fails the build rather than
 quietly scoring every model at one or zero.
 
-### Security
+## Security
 
 This tool executes code written by a language model. Agent commands run in a
 container with **no network**, which is the main containment, but a container
@@ -169,7 +168,7 @@ only run task sets you would run as a script.
 Full trust boundaries, including what is deliberately not defended:
 `docs/SECURITY.md`.
 
-### Limitations
+## Limitations
 
 - **No paid model has been benchmarked yet.** Every run in the committed database is
   a local Ollama model at zero cost. The Anthropic and OpenAI code paths are unit
@@ -184,7 +183,7 @@ Full trust boundaries, including what is deliberately not defended:
   inflates its recorded cost and token count for that run.
 - Regression detection and `--junitxml` assume pytest.
 
-### Executors
+## Executors
 
 The sandbox sits behind one narrow interface, so it can be reimplemented in
 another language without touching evaluation logic. Two implementations ship,
@@ -193,15 +192,15 @@ and both pass the same contract:
 | `--executor` | What runs |
 |---|---|
 | `auto` (default) | The Rust binary when one is found, else the Python one |
-| `rust` | `agentbench-executord`, a separate process speaking the protocol |
+| `rust` | `agentgauge-executord`, a separate process speaking the protocol |
 | `python` | In-process docker-py. The reference implementation and fallback |
 
-`auto` looks for the binary at `$AGENTBENCH_EXECUTOR`, then beside the
+`auto` looks for the binary at `$AGENTGAUGE_EXECUTOR`, then beside the
 installed package, then in `rust/target/{release,debug}` — so a
 `cargo build --release` in a checkout is picked up with no further setup, ahead
 of the published one `pip install -e .` also installs — then in the Python
 environment's scripts directory, then on `PATH`. Finding none is normal: on a
-platform with no executor wheel, agentbench uses Python.
+platform with no executor wheel, agentgauge uses Python.
 
 `docs/PROTOCOL.md` specifies the wire form; `tests/conformance/` is the
 normative definition of correct behaviour, and an implementation is
@@ -219,7 +218,7 @@ roughly 0.2% of a real run — model inference dominates. Its actual value is
 streaming output, guaranteed container cleanup, and headroom at concurrency.
 Measurements and caveats: `docs/BENCHMARKS.md`.
 
-### Development
+## Development
 
 ```sh
 .venv/bin/python -m pytest tests/ -m "not docker"   # offline suite, no API keys
@@ -227,12 +226,12 @@ Measurements and caveats: `docs/BENCHMARKS.md`.
 .venv/bin/python -m pytest tests/                   # adds the Docker integration test
 .venv/bin/python -m ruff check .
 .venv/bin/python scripts/sandbox_smoke.py           # docker executor standalone check
-.venv/bin/python scripts/single_run_smoke.py ollama/agentbench-qwen
+.venv/bin/python scripts/single_run_smoke.py ollama/agentgauge-qwen
 .venv/bin/python scripts/debug_loop.py              # agent loop w/o docker, prints every turn
 ```
 
 CI runs ruff and the offline suite on every push.
 
-### License
+## License
 
 MIT — see `LICENSE`.

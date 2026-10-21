@@ -1,7 +1,7 @@
 name: Sandbox image
 
-# Builds agentbench/sandbox/base.Dockerfile for linux/amd64 and linux/arm64
-# and pushes it to the repository named in agentbench/sandbox/image.py, which
+# Builds agentgauge/sandbox/base.Dockerfile for linux/amd64 and linux/arm64
+# and pushes it to the repository named in agentgauge/sandbox/image.py, which
 # is the image every run defaults to.
 #
 # Pushing does not change that default. image.py pins a digest, and moving it
@@ -16,7 +16,7 @@ name: Sandbox image
 on:
   push:
     branches: [main]
-    paths: [agentbench/sandbox/base.Dockerfile]
+    paths: [agentgauge/sandbox/base.Dockerfile]
   workflow_dispatch:
 
 permissions:
@@ -45,8 +45,8 @@ jobs:
       - id: build
         uses: docker/build-push-action@v6
         with:
-          context: agentbench/sandbox
-          file: agentbench/sandbox/base.Dockerfile
+          context: agentgauge/sandbox
+          file: agentgauge/sandbox/base.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
@@ -62,9 +62,9 @@ jobs:
             echo "Built \`${{ steps.names.outputs.repository }}@$DIGEST\`."
             echo
             if [ "$DIGEST" = "$PINNED" ]; then
-              echo "This is already the digest pinned in agentbench/sandbox/image.py."
+              echo "This is already the digest pinned in agentgauge/sandbox/image.py."
             else
-              echo "To make it the default, set in agentbench/sandbox/image.py:"
+              echo "To make it the default, set in agentgauge/sandbox/image.py:"
               echo
               echo "    IMAGE_DIGEST = \"$DIGEST\""
             fi
