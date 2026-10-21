@@ -106,11 +106,13 @@ class OpenAIProvider:
         assistant = Message(role="assistant", content=content, tool_calls=tool_calls)
         usage = TokenUsage()
         if response.usage:
-            # prompt_tokens already includes any cached tokens, so they are
-            # not broken out here — doing so would double-count them.
+            # prompt_tokens includes the cached ones, which bill at their own
+            # (lower) rate: split them out so each is charged once, correctly.
+            cached = _cached_prompt_tokens(response.usage)
             usage = TokenUsage(
-                tokens_in=response.usage.prompt_tokens,
+                tokens_in=response.usage.prompt_tokens - cached,
                 tokens_out=_billed_output_tokens(response.usage),
+                cache_read_tokens=cached,
             )
         return ProviderResponse(
             messages=[assistant],
@@ -142,6 +144,18 @@ def _retry_delay(exc: openai.APIStatusError, attempt: int) -> float:
     if match:
         return float(match.group(1)) + 1.0
     return min(5.0 * 2.0 ** (attempt - 1), 60.0)
+
+
+def _cached_prompt_tokens(usage: CompletionUsage) -> int:
+    """Prompt tokens served from the provider's cache.
+
+    An agent loop resends its whole history every turn, so after the first
+    few turns most input is cached. Billing it at the full input rate
+    overstated cost by up to the cache discount (half, on gpt-4o).
+    """
+    details = getattr(usage, "prompt_tokens_details", None)
+    cached = getattr(details, "cached_tokens", None) if details else None
+    return cached if isinstance(cached, int) else 0
 
 
 def _billed_output_tokens(usage: CompletionUsage) -> int:
