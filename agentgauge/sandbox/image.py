@@ -17,7 +17,7 @@ from importlib.resources import files
 # release refuses to publish unless this digest is public and was built from
 # the Dockerfile being released.
 IMAGE_REPOSITORY = "ghcr.io/anmol0b/agentgauge-base"
-IMAGE_DIGEST = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+IMAGE_DIGEST = "sha256:3cb6a40bf5245f1faf358a609fb5760aec85a5e4649f69d212baf2d38da91e8a"
 DEFAULT_IMAGE = f"{IMAGE_REPOSITORY}@{IMAGE_DIGEST}"
 
 # What `agentgauge image build` tags, and what the docker tests and CI use: an
