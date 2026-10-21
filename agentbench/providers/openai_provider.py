@@ -73,6 +73,8 @@ class OpenAIProvider:
                 id=tc.id,
                 name=tc.function.name,
                 arguments=json.loads(tc.function.arguments or "{}"),
+                # not in the SDK's schema, so it arrives as an extra field
+                provider_extra=getattr(tc, "extra_content", None),
             )
             # a custom (non-function) tool call carries no .function and would
             # raise here; we declare only function tools, so skip anything else
@@ -136,21 +138,22 @@ def _to_openai_messages(messages: list[Message]) -> list[dict[str, Any]]:
             # (Ollama: "invalid message content type: <nil>") — always a string
             wire: dict[str, Any] = {"role": "assistant", "content": msg.content or ""}
             if msg.tool_calls:
-                wire["tool_calls"] = [
-                    {
-                        "id": call.id,
-                        "type": "function",
-                        "function": {
-                            "name": call.name,
-                            "arguments": json.dumps(call.arguments),
-                        },
-                    }
-                    for call in msg.tool_calls
-                ]
+                wire["tool_calls"] = [_to_openai_tool_call(call) for call in msg.tool_calls]
             out.append(wire)
         else:
             out.append({"role": "user", "content": msg.content})
     return out
+
+
+def _to_openai_tool_call(call: ToolCall) -> dict[str, Any]:
+    wire: dict[str, Any] = {
+        "id": call.id,
+        "type": "function",
+        "function": {"name": call.name, "arguments": json.dumps(call.arguments)},
+    }
+    if call.provider_extra:
+        wire["extra_content"] = call.provider_extra
+    return wire
 
 
 def _tool_call_from_content(content: str, known_tools: set[str]) -> ToolCall | None:

@@ -21,6 +21,10 @@ class ToolCall(BaseModel):
     id: str
     name: str
     arguments: dict[str, Any]
+    # Opaque provider data that must be echoed back with this call on the
+    # next turn (Gemini's thought_signature rejects the request otherwise).
+    # Never interpreted, and kept out of transcripts.
+    provider_extra: dict[str, Any] | None = None
 
 
 class Message(BaseModel):

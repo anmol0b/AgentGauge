@@ -166,6 +166,75 @@ async def test_openai_tolerates_a_response_without_usage():
     assert result.usage.tokens_in == 0 and result.stop_reason == "end_turn"
 
 
+async def test_openai_echoes_a_tool_calls_thought_signature_next_turn():
+    """Gemini 3 rejects turn two with a 400 unless the signature comes back.
+
+    The response is a real one from Gemini's compatible endpoint (signature
+    shortened), parsed by the SDK itself: extra_content is not in its schema,
+    so this checks the field survives parsing as well as the round trip.
+    """
+    from openai.types.chat import ChatCompletion
+
+    response = ChatCompletion.model_validate(
+        {
+            "id": "743YarDWHNWJjuMPvI-ZuAE",
+            "object": "chat.completion",
+            "created": 1792577008,
+            "model": "gemini-3.5-flash",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "id": "call_958686",
+                                "type": "function",
+                                "function": {
+                                    "name": "read_file",
+                                    "arguments": '{"path":"src/app.py"}',
+                                },
+                                "extra_content": {"google": {"thought_signature": "EuEBCt4B"}},
+                            }
+                        ],
+                    },
+                }
+            ],
+            "usage": {"completion_tokens": 20, "prompt_tokens": 49, "total_tokens": 109},
+        }
+    )
+    provider = OpenAIProvider("gemini-3.5-flash", api_key="t")
+    fake = _openai(provider, response)
+    first = await provider.run_agent_turn(MESSAGES, TOOLS)
+
+    history = [
+        *MESSAGES,
+        *first.messages,
+        Message(role="tool", tool_call_id="call_958686", content="def add(a, b): ..."),
+    ]
+    await provider.run_agent_turn(history, TOOLS)
+
+    sent_call = fake.kwargs["messages"][1]["tool_calls"][0]
+    assert sent_call["extra_content"] == {"google": {"thought_signature": "EuEBCt4B"}}
+    assert first.usage.tokens_out == 60
+
+
+async def test_openai_sends_no_extra_content_for_a_plain_tool_call():
+    """Strict OpenAI-compatible servers may reject an unknown field."""
+    call = SimpleNamespace(
+        id="call_1",
+        type="function",
+        function=SimpleNamespace(name="read_file", arguments="{}"),
+    )
+    provider = OpenAIProvider("gpt-4o", api_key="t")
+    fake = _openai(provider, _openai_response(None, [call], "tool_calls"))
+    first = await provider.run_agent_turn(MESSAGES, TOOLS)
+
+    await provider.run_agent_turn([*MESSAGES, *first.messages], TOOLS)
+    assert "extra_content" not in fake.kwargs["messages"][1]["tool_calls"][0]
+
+
 async def test_openai_counts_thinking_left_out_of_completion_tokens():
     """Gemini reports thinking only in total_tokens, and bills it as output."""
     provider = OpenAIProvider("gemini-3.6-flash", api_key="t")
